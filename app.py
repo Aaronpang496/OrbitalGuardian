@@ -3,18 +3,20 @@ from ultralytics import YOLO
 from PIL import Image
 import numpy as np
 
-st.set_page_config(page_title="Orbital Guardian", page_icon="🛰️")
+st.set_page_config(page_title="CityGuardian", page_icon="🏙️）
 
-st.title("🛰️ Orbital Guardian")
-st.subheader("AI-Powered Space Debris Detection System")
+st.title("🏙️ CityGuardian")
+st.subheader("AI-Powered Urban Hazard Detection System")
 
-st.write("Upload a space image to detect debris and calculate collision risks.")
+st.write("Upload a photo of a street or building to detect hazards.")
 
 @st.cache_resource
 def load_model():
     # We use a pre-trained YOLO model for the demo.
     # In the future, you can replace 'yolov8n.pt' with your own 'best.pt' file.
-    return YOLO('yolov8n.pt') 
+   from huggingface_hub import hf_hub_download
+model_path = hf_hub_download(repo_id="cazzz307/yolov8-crack-detection", filename="best.pt")
+return YOLO(model_path) 
 
 model = load_model()
 
