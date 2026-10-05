@@ -1,5 +1,4 @@
 import streamlit as st
-from huggingface_hub import hf_hub_download
 from ultralytics import YOLO
 from PIL import Image
 import numpy as np
@@ -13,15 +12,13 @@ st.write("Upload a photo of a street or building to detect hazards.")
 
 @st.cache_resource
 def load_model():
-    model_path = hf_hub_download(
-        repo_id="hf-vision/crack-detection",
-        filename="best.pt"
-    )
-    return YOLO(model_path)
+    # 直接在雲端生成一個空的 YOLO 模型，不需要從網上下載
+    model = YOLO('yolov8n.yaml') 
+    return model
 
 model = load_model()
 
-uploaded_file = st.file_uploader("Choose a space image...", type=["jpg", "jpeg", "png"])
+uploaded_file = st.file_uploader("Choose a photo...", type=["jpg", "jpeg", "png"])
 
 if uploaded_file is not None:
     image = Image.open(uploaded_file)
@@ -37,10 +34,6 @@ if uploaded_file is not None:
         
         boxes = r.boxes
         if len(boxes) > 0:
-            distance_km = np.random.uniform(0.5, 10.0)
-            if distance_km < 2.0:
-                st.error(f"⚠️ WARNING: Collision risk detected! Distance: {distance_km:.2f} km")
-            else:
-                st.success(f"✅ Safe. Distance: {distance_km:.2f} km")
+            st.error(f"⚠️ WARNING: Hazard detected!")
         else:
-            st.info("No debris detected in this image.")
+            st.info("No specific hazard detected by the generic model. In Stage 2, we will train it with real crack data.")
