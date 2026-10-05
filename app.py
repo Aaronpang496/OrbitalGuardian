@@ -12,9 +12,8 @@ st.write("Upload a photo of a street or building to detect hazards.")
 
 @st.cache_resource
 def load_model():
-    from huggingface_hub import hf_hub_download
     model_path = hf_hub_download(
-        repo_id="cazzz307/yolov8-crack-detection",
+        repo_id="keremberke/yolov8n-crack-detection",
         filename="best.pt"
     )
     return YOLO(model_path)
