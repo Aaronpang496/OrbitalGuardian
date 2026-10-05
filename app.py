@@ -12,11 +12,12 @@ st.write("Upload a photo of a street or building to detect hazards.")
 
 @st.cache_resource
 def load_model():
-    # We use a pre-trained YOLO model for the demo.
-    # In the future, you can replace 'yolov8n.pt' with your own 'best.pt' file.
-   from huggingface_hub import hf_hub_download
-model_path = hf_hub_download(repo_id="cazzz307/yolov8-crack-detection", filename="best.pt")
-return YOLO(model_path) 
+    from huggingface_hub import hf_hub_download
+    model_path = hf_hub_download(
+        repo_id="cazzz307/yolov8-crack-detection",
+        filename="best.pt"
+    )
+    return YOLO(model_path)
 
 model = load_model()
 
