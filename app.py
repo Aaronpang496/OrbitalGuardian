@@ -3,7 +3,7 @@ from ultralytics import YOLO
 from PIL import Image
 import numpy as np
 
-st.set_page_config(page_title="CityGuardian", page_icon="🏙️）
+st.set_page_config(page_title="CityGuardian", page_icon="🏙️")
 
 st.title("🏙️ CityGuardian")
 st.subheader("AI-Powered Urban Hazard Detection System")
