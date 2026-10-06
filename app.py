@@ -11,7 +11,6 @@ st.write("Upload a photo of a street or building to detect hazards.")
 
 @st.cache_resource
 def train_model():
-    # 1. 生成 200 張模擬「城市危險」訓練圖
     base_dir = 'city_hazard_dataset'
     os.makedirs(f'{base_dir}/images/train', exist_ok=True)
     os.makedirs(f'{base_dir}/labels/train', exist_ok=True)
@@ -50,14 +49,13 @@ def train_model():
         with open(f'{base_dir}/labels/train/img_{i}.txt', 'w') as f:
             f.write(f'{label} 0.5 0.5 0.3 0.3')
     
-    # 這裡的路徑已經修正為相對路徑
     with open(f'{base_dir}/data.yaml', 'w') as f:
-        f.write(f"path: ./{base_dir}\ntrain: images/train\nval: images/train\nnames:\n  0: crack\n  1: blocked_exit\n  2: fallen_tree\n  3: broken_sign\n  4: pothole")
+        f.write(f"path: {os.path.abspath(base_dir)}\ntrain: images/train\nval: images/train\nnames:\n  0: crack\n  1: blocked_exit\n  2: fallen_tree\n  3: broken_sign\n  4: pothole")
 
-    # 2. 訓練模型（路徑已修正，epochs 縮短為 10）
     model = YOLO('yolov8n.yaml')
-    model.train(data=f'./{base_dir}/data.yaml', epochs=10, imgsz=640, batch=8, name='city_hazard_model', verbose=False)
-    return YOLO('./runs/detect/city_hazard_model/weights/best.pt')
+    model.train(data=f'{base_dir}/data.yaml', epochs=10, imgsz=640, batch=8, project='.', name='my_model', verbose=False)
+    
+    return YOLO('my_model/weights/best.pt')
 
 model = train_model()
 
