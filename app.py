@@ -1,4 +1,3 @@
-
 import streamlit as st
 import requests
 import base64
@@ -10,9 +9,9 @@ st.title("🚗 Driver Drowsiness Monitor")
 st.subheader("AI-Powered Fatigue Detection System")
 st.write("Upload a driver's photo to detect drowsiness.")
 
-# Replace with your actual Roboflow API Key and Model ID
+# Your Roboflow credentials
 API_KEY = "3zlKh7bl9yZXMl5RvxNY"
-model_id="drowsiness-detection-b2qqq-iqk0f-1-rfdetr-small-t1"
+MODEL_ID = "drowsiness-detection-b2qqq-iqk0f-1-rfdetr-small-t1"
 
 uploaded_file = st.file_uploader("Choose a photo...", type=["jpg", "jpeg", "png"])
 
@@ -27,13 +26,15 @@ if uploaded_file is not None:
         img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
         
         # Call the Roboflow API
+        url = f"https://serverless.roboflow.com/{MODEL_ID}/infer"
+        params = {"api_key": API_KEY}
         
         response = requests.post(
-    f"https://serverless.roboflow.com/{MODEL_ID}/infer",
-    params={"api_key": API_KEY},
-    data=img_str,
-    headers={"Content-Type": "application/x-www-form-urlencoded"}
-)
+            url,
+            params=params,
+            data=img_str,
+            headers={"Content-Type": "application/x-www-form-urlencoded"}
+        )
         
     if response.status_code == 200:
         result = response.json()
