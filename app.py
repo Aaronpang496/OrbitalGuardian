@@ -27,12 +27,13 @@ if uploaded_file is not None:
         img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
         
         # Call the Roboflow API
+        
         response = requests.post(
-            f"https://serverless.roboflow.com/{MODEL_ID}",
-            params={"api_key": API_KEY},
-            data=img_str,
-            headers={"Content-Type": "application/x-www-form-urlencoded"}
-        )
+    f"https://serverless.roboflow.com/{MODEL_ID}/infer",
+    params={"api_key": API_KEY},
+    data=img_str,
+    headers={"Content-Type": "application/x-www-form-urlencoded"}
+)
         
     if response.status_code == 200:
         result = response.json()
