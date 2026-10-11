@@ -1,24 +1,18 @@
+
 import streamlit as st
-from inference_sdk import InferenceHTTPClient
+import requests
+import base64
 from PIL import Image
-import os
+import io
 
 st.set_page_config(page_title="Driver Drowsiness Monitor", page_icon="🚗")
-
 st.title("🚗 Driver Drowsiness Monitor")
 st.subheader("AI-Powered Fatigue Detection System")
 st.write("Upload a driver's photo to detect drowsiness.")
 
-@st.cache_resource
-def load_model():
-    # Initialize the Roboflow Inference client
-    client = InferenceHTTPClient(
-        api_url="https://serverless.roboflow.com",
-        api_key="3zlKh7bl9yZXMl5RvxNY" # <--- 在這裡填上你的 Roboflow API Key
-    )
-    return client
-
-client = load_model()
+# Replace with your actual Roboflow API Key and Model ID
+API_KEY = "3zlKh7bl9yZXMl5RvxNY"
+MODEL_ID = "drowsiness-detection-b2qqq/1" # <--- 請換成你複製到的完整 Model ID
 
 uploaded_file = st.file_uploader("Choose a photo...", type=["jpg", "jpeg", "png"])
 
@@ -27,13 +21,25 @@ if uploaded_file is not None:
     st.image(image, caption='Uploaded Image', use_column_width=True)
     
     with st.spinner('Analyzing...'):
-        # Call the Roboflow model
-        result = client.infer(image, model_id="drowsiness-detection-b2qqq/1")
+        # Convert image to base64
+        buffered = io.BytesIO()
+        image.save(buffered, format="JPEG")
+        img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
         
-    # Display the result
-    st.json(result)
-    
-    if result.get("predictions"):
-        st.error(f"⚠️ WARNING: {len(result['predictions'])} object(s) detected!")
+        # Call the Roboflow API
+        response = requests.post(
+            f"https://serverless.roboflow.com/{MODEL_ID}",
+            params={"api_key": API_KEY},
+            data=img_str,
+            headers={"Content-Type": "application/x-www-form-urlencoded"}
+        )
+        
+    if response.status_code == 200:
+        result = response.json()
+        st.json(result)
+        if result.get("predictions"):
+            st.error(f"⚠️ WARNING: {len(result['predictions'])} object(s) detected!")
+        else:
+            st.info("✅ No drowsiness detected.")
     else:
-        st.info("✅ No drowsiness detected.")
+        st.error(f"API Error: {response.status_code} - {response.text}")
