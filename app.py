@@ -12,7 +12,7 @@ st.write("Upload a driver's photo to detect drowsiness.")
 
 # Replace with your actual Roboflow API Key and Model ID
 API_KEY = "3zlKh7bl9yZXMl5RvxNY"
-MODEL_ID = "drowsiness-detection-b2qqq/1" # <--- 請換成你複製到的完整 Model ID
+MODEL_ID = "drowsiness-detection-b2qqq-iqk0f-1-rfdetr-small-t1"
 
 uploaded_file = st.file_uploader("Choose a photo...", type=["jpg", "jpeg", "png"])
 
