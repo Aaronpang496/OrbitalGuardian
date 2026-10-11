@@ -14,7 +14,7 @@ def load_model():
     # Initialize the Roboflow Inference client
     client = InferenceHTTPClient(
         api_url="https://serverless.roboflow.com",
-        api_key="YOUR_ROBOFLOW_API_KEY" # <--- 在這裡填上你的 Roboflow API Key
+        api_key="3zlKh7bl9yZXMl5RvxNY" # <--- 在這裡填上你的 Roboflow API Key
     )
     return client
 
