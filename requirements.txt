@@ -2,3 +2,4 @@ streamlit
 ultralytics
 gdown
 pillow
+inference-sdk
