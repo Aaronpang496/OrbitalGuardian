@@ -1,24 +1,39 @@
-pip install -U inference-sdk
-# 1. Import the library
-from inference_sdk import InferenceHTTPClient, InferenceConfiguration
+import streamlit as st
+from inference_sdk import InferenceHTTPClient
+from PIL import Image
+import os
 
-# 2. Connect to your workflow
-client = InferenceHTTPClient(
-    api_url="https://serverless.roboflow.com",
-    api_key="__ROBOFLOW_API_KEY__"
-).configure(InferenceConfiguration(
-    api_key_transport="header"  # header-based auth (inference v1.5.0+)
-))
+st.set_page_config(page_title="Driver Drowsiness Monitor", page_icon="🚗")
 
-# 3. Run your workflow on an image
-result = client.run_workflow(
-    workspace_name="tsz-chung-pang",
-    workflow_id="drowsiness-detection-vdrowsiness-detection-b2qqq-iqk0f-1-rfdetr-small-t1-logic",
-    images={
-        "image": "YOUR_IMAGE.jpg" # Path to your image file
-    },
-    use_cache=True # Speeds up repeated requests
-)
+st.title("🚗 Driver Drowsiness Monitor")
+st.subheader("AI-Powered Fatigue Detection System")
+st.write("Upload a driver's photo to detect drowsiness.")
 
-# 4. Get your results
-print(result)
+@st.cache_resource
+def load_model():
+    # Initialize the Roboflow Inference client
+    client = InferenceHTTPClient(
+        api_url="https://serverless.roboflow.com",
+        api_key="YOUR_ROBOFLOW_API_KEY" # <--- 在這裡填上你的 Roboflow API Key
+    )
+    return client
+
+client = load_model()
+
+uploaded_file = st.file_uploader("Choose a photo...", type=["jpg", "jpeg", "png"])
+
+if uploaded_file is not None:
+    image = Image.open(uploaded_file)
+    st.image(image, caption='Uploaded Image', use_column_width=True)
+    
+    with st.spinner('Analyzing...'):
+        # Call the Roboflow model
+        result = client.infer(image, model_id="drowsiness-detection-b2qqq/1")
+        
+    # Display the result
+    st.json(result)
+    
+    if result.get("predictions"):
+        st.error(f"⚠️ WARNING: {len(result['predictions'])} object(s) detected!")
+    else:
+        st.info("✅ No drowsiness detected.")
