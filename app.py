@@ -1,7 +1,7 @@
 import streamlit as st
 from inference_sdk import InferenceHTTPClient, InferenceConfiguration
-from PIL import Image
-import io
+from PIL import Image, ImageDraw
+import os
 
 st.set_page_config(page_title="Driver Drowsiness Monitor", page_icon="🚗")
 st.title("🚗 Driver Drowsiness Monitor")
@@ -34,34 +34,26 @@ if uploaded_file is not None:
         result = client.run_workflow(
             workspace_name="tsz-chung-pang",
             workflow_id="drowsiness-detection-vdrowsiness-detection-b2qqq-iqk0f-2-yolo26s-t1-logic",
-            images={
-                "image": temp_path
-            },
+            images={"image": temp_path},
             use_cache=True
         )
         
-    st.json(result)
-    # Extract predictions
-if result and len(result) > 0:
-    predictions = result[0].get("predictions", {}).get("predictions", [])
-    
-    if predictions:
-        st.error(f"⚠️ WARNING: {len(predictions)} object(s) detected!")
-        
-        # Draw boxes on the image
-        from PIL import ImageDraw
-        draw = ImageDraw.Draw(image)
-        for pred in predictions:
-            x = pred["x"]
-            y = pred["y"]
-            w = pred["width"]
-            h = pred["height"]
-            draw.rectangle([x - w/2, y - h/2, x + w/2, y + h/2], outline="red", width=3)
-        st.image(image, caption='Detection Result', use_column_width=True)
-    else:
-        st.info("✅ No drowsiness detected.")
-    # Check if any predictions were found
     if result and len(result) > 0:
-        st.error("⚠️ WARNING: Drowsiness detected!")
+        predictions = result[0].get("predictions", {}).get("predictions", [])
+        
+        if predictions:
+            st.error(f"⚠️ WARNING: Drowsiness detected!")
+            
+            # Draw boxes on the image
+            draw = ImageDraw.Draw(image)
+            for pred in predictions:
+                x = pred["x"]
+                y = pred["y"]
+                w = pred["width"]
+                h = pred["height"]
+                draw.rectangle([x - w/2, y - h/2, x + w/2, y + h/2], outline="red", width=3)
+            st.image(image, caption='Detection Result', use_column_width=True)
+        else:
+            st.info("✅ No drowsiness detected.")
     else:
         st.info("✅ No drowsiness detected.")
