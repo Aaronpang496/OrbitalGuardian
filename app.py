@@ -1,6 +1,7 @@
 import streamlit as st
-from inference_sdk import InferenceHTTPClient
+from inference_sdk import InferenceHTTPClient, InferenceConfiguration
 from PIL import Image
+import io
 
 st.set_page_config(page_title="Driver Drowsiness Monitor", page_icon="🚗")
 st.title("🚗 Driver Drowsiness Monitor")
@@ -12,7 +13,9 @@ def load_client():
     return InferenceHTTPClient(
         api_url="https://serverless.roboflow.com",
         api_key="3zlKh7bl9yZXMl5RvxNY"
-    )
+    ).configure(InferenceConfiguration(
+        api_key_transport="header"
+    ))
 
 client = load_client()
 
@@ -23,11 +26,24 @@ if uploaded_file is not None:
     st.image(image, caption='Uploaded Image', use_column_width=True)
     
     with st.spinner('Analyzing...'):
-        result = client.infer(image, model_id="drowsiness-detection-b2qqq-iqk0f-1-rfdetr-small-t1")
+        # Save the uploaded image to a temporary file
+        temp_path = "temp_image.jpg"
+        image.save(temp_path)
+        
+        # Run the Roboflow workflow
+        result = client.run_workflow(
+            workspace_name="tsz-chung-pang",
+            workflow_id="drowsiness-detection-vdrowsiness-detection-b2qqq-iqk0f-2-yolo26s-t1-logic",
+            images={
+                "image": temp_path
+            },
+            use_cache=True
+        )
         
     st.json(result)
     
-    if result.get("predictions"):
-        st.error(f"⚠️ WARNING: {len(result['predictions'])} object(s) detected!")
+    # Check if any predictions were found
+    if result and len(result) > 0:
+        st.error("⚠️ WARNING: Drowsiness detected!")
     else:
         st.info("✅ No drowsiness detected.")
