@@ -1,3 +1,4 @@
+import streamlit as st
 import os
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 import gdown
