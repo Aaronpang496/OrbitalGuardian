@@ -19,25 +19,26 @@ client = load_client()
 uploaded_file = st.file_uploader("Choose a photo...", type=["jpg", "jpeg", "png"])
 
 if uploaded_file is not None:
-    # Open image and convert to RGB (fixes transparency errors)
-    image = Image.open(uploaded_file)
-    image = image.convert("RGB")
-    
+    # Fix transparency issues
+    image = Image.open(uploaded_file).convert("RGB")
     st.image(image, caption='Uploaded Image', use_column_width=True)
     
     with st.spinner('Analyzing...'):
         temp_path = "temp_image.jpg"
         image.save(temp_path)
         
-        # Run the Roboflow workflow
-        result = client.run_workflow(
-            workspace_name="tsz-chung-pang",
-            workflow_id="drowsiness-detection-vdrowsiness-detection-b2qqq-iqk0f-2-yolo26s-t1-logic",
-            images={"image": temp_path},
-            use_cache=True
-        )
-        
-    # --- Extract predictions ---
+        try:
+            result = client.run_workflow(
+                workspace_name="tsz-chung-pang",
+                workflow_id="drowsiness-detection-vdrowsiness-detection-b2qqq-iqk0f-2-yolo26s-t1-logic",
+                images={"image": temp_path},
+                use_cache=True
+            )
+        except Exception as e:
+            st.error(f"API Error: {e}")
+            st.stop()
+
+    # --- Extract predictions from different possible formats ---
     predictions = []
     if result and len(result) > 0:
         if isinstance(result[0], dict):
@@ -49,7 +50,7 @@ if uploaded_file is not None:
         elif isinstance(result[0], list):
             predictions = result[0]
 
-    # --- Filter: only keep predictions with confidence > 60% ---
+    # --- Filter: keep only predictions with confidence > 60% ---
     high_confidence_preds = [p for p in predictions if p.get("confidence", 0) > 0.6]
 
     # --- Display results ---
@@ -61,7 +62,7 @@ if uploaded_file is not None:
         else:
             st.success("✅ Driver is awake.")
         
-        # Draw boxes and percentages
+        # Draw boxes and labels
         draw = ImageDraw.Draw(image)
         try:
             font = ImageFont.truetype("arial.ttf", 24)
@@ -76,14 +77,13 @@ if uploaded_file is not None:
             conf = pred.get("confidence", 0)
             cls = pred.get("class", "drowsy")
             
-            # Red for drowsy, Green for awake
             color = "red" if cls == "drowsy" else "green"
             draw.rectangle([x - w/2, y - h/2, x + w/2, y + h/2], outline=color, width=3)
             draw.text((x - w/2, y - h/2 - 30), f"{cls} {conf:.0%}", fill=color, font=font)
             
         st.image(image, caption='Detection Result', use_column_width=True)
         
-        # --- Detailed Description ---
+        # --- Detailed Analysis ---
         st.markdown("---")
         st.markdown("### 📝 Detection Analysis")
         
