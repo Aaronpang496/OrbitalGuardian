@@ -40,7 +40,7 @@ if uploaded_file is not None:
         predictions = result[0].get("predictions", {}).get("predictions", [])
     
     # --- Filter: only keep predictions with confidence > 60% ---
-    high_confidence_preds = [p for p in predictions if p["confidence"] > 0.6]
+    high_confidence_preds = [p for p in predictions if p["confidence"] > 0.3]
     
     if high_confidence_preds:
         st.error("⚠️ WARNING: Drowsiness detected!")
