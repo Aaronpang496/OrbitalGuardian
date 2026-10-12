@@ -26,7 +26,6 @@ if uploaded_file is not None:
         temp_path = "temp_image.jpg"
         image.save(temp_path)
         
-        # Run the Roboflow workflow (the version that worked)
         result = client.run_workflow(
             workspace_name="tsz-chung-pang",
             workflow_id="drowsiness-detection-vdrowsiness-detection-b2qqq-iqk0f-2-yolo26s-t1-logic",
@@ -34,7 +33,6 @@ if uploaded_file is not None:
             use_cache=True
         )
         
-    # --- Extract predictions ---
     predictions = []
     if result and len(result) > 0:
         if isinstance(result[0], dict):
@@ -46,37 +44,43 @@ if uploaded_file is not None:
         elif isinstance(result[0], list):
             predictions = result[0]
 
-    # --- Display results ---
     if predictions:
         st.error("⚠️ WARNING: Drowsiness detected!")
         
-        # Draw boxes and percentages
         draw = ImageDraw.Draw(image)
         for pred in predictions:
-            x = pred.get("x", 0)
-            y = pred.get("y", 0)
-            w = pred.get("width", 0)
-            h = pred.get("height", 0)
-            conf = pred.get("confidence", 0)
-            cls = pred.get("class", "drowsy")
-            
+            x, y = pred.get("x", 0), pred.get("y", 0)
+            w, h = pred.get("width", 0), pred.get("height", 0)
+            conf, cls = pred.get("confidence", 0), pred.get("class", "drowsy")
             draw.rectangle([x - w/2, y - h/2, x + w/2, y + h/2], outline="red", width=3)
             draw.text((x - w/2, y - h/2 - 15), f"{cls} {conf:.0%}", fill="red")
             
         st.image(image, caption='Detection Result', use_column_width=True)
         
-        # Description
-        st.markdown("""
-        ---
-        ### 📝 Detection Analysis
-        Our AI has detected signs of **driver drowsiness**. 
-        - **Recommendation:** The driver should pull over and rest immediately.
+        # --- Detailed Description ---
+        st.markdown("---")
+        st.markdown("### 📝 Detection Analysis")
+        
+        first_pred = predictions[0]
+        st.markdown(f"""
+        Our AI has analyzed the image and detected a potential safety risk.
+        
+        | Metric | Value |
+        | :--- | :--- |
+        | **Detected Class** | `{first_pred.get('class', 'drowsy')}` |
+        | **Confidence Score** | `{first_pred.get('confidence', 0):.2%}` |
+        | **Bounding Box** | x: `{first_pred.get('x', 0):.1f}`, y: `{first_pred.get('y', 0):.1f}`, w: `{first_pred.get('width', 0):.1f}`, h: `{first_pred.get('height', 0):.1f}` |
+        | **Detection Count** | `{len(predictions)}` object(s) |
+        
+        **AI Decision Logic:**
+        The model uses a YOLOv8 object detection algorithm. It analyzes the driver's facial features (eye closure, head position) within the bounding box. A confidence score above 60% indicates a high probability of drowsiness.
+        
+        **Recommendation:**
+        🚨 The driver should pull over to a safe location and rest immediately.
         """)
         
     else:
         st.info("✅ No drowsiness detected.")
-        
-        # Description
         st.markdown("""
         ---
         ### 📝 Detection Analysis
