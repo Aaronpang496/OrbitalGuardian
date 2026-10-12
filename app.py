@@ -1,8 +1,6 @@
 import streamlit as st
 import requests
-import base64
 from PIL import Image, ImageDraw
-import io
 
 st.set_page_config(page_title="Driver Drowsiness Monitor", page_icon="🚗")
 st.title("🚗 Driver Drowsiness Monitor")
@@ -20,39 +18,29 @@ if uploaded_file is not None:
     st.image(image, caption='Uploaded Image', use_column_width=True)
     
     with st.spinner('Analyzing...'):
-        # Convert image to base64
-        buffered = io.BytesIO()
-        image.save(buffered, format="JPEG")
-        img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
-        
-        # Call the Roboflow Object Detection API
+        # Call the Roboflow Object Detection API with the image file
         url = f"https://detect.roboflow.com/{MODEL_ID}"
-        params = {"api_key": API_KEY, "confidence": 30} # Lowered confidence threshold
+        params = {"api_key": API_KEY, "confidence": 30}
         
-        response = requests.post(url, params=params, data=img_str, headers={"Content-Type": "application/x-www-form-urlencoded"})
+        # Send the image file directly
+        response = requests.post(url, params=params, files={"file": uploaded_file.getvalue()})
         
     if response.status_code == 200:
         result = response.json()
-        
-        # Check if any predictions exist
         predictions = result.get("predictions", [])
         
         if predictions:
-            st.error(f"⚠️ WARNING: Drowsiness detected!")
+            st.error("⚠️ WARNING: Drowsiness detected!")
             
             # Draw boxes and labels
             draw = ImageDraw.Draw(image)
             for pred in predictions:
-                x = pred["x"]
-                y = pred["y"]
-                w = pred["width"]
-                h = pred["height"]
-                conf = pred["confidence"]
-                cls = pred["class"]
+                x, y = pred["x"], pred["y"]
+                w, h = pred["width"], pred["height"]
+                conf, cls = pred["confidence"], pred["class"]
                 
                 # Draw the box
                 draw.rectangle([x - w/2, y - h/2, x + w/2, y + h/2], outline="red", width=3)
-                
                 # Draw the label
                 draw.text((x - w/2, y - h/2 - 15), f"{cls} {conf:.0%}", fill="red")
                 
