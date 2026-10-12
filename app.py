@@ -50,7 +50,7 @@ if uploaded_file is not None:
         elif isinstance(result[0], list):
             predictions = result[0]
 
-    # --- Filter: keep only predictions with confidence > 60% ---
+    # --- Filter: only keep predictions with confidence > 60% ---
     high_confidence_preds = [p for p in predictions if p.get("confidence", 0) > 0.6]
 
     # --- Display results ---
@@ -83,27 +83,40 @@ if uploaded_file is not None:
             
         st.image(image, caption='Detection Result', use_column_width=True)
         
-        # --- Detailed Analysis ---
+        # --- Detailed Description (Dynamic) ---
         st.markdown("---")
         st.markdown("### 📝 Detection Analysis")
         
         first_pred = high_confidence_preds[0]
-        st.markdown(f"""
-        Our AI has analyzed the image and detected a potential safety risk.
+        cls = first_pred.get('class', 'drowsy')
+        conf = first_pred.get('confidence', 0)
         
-        | Metric | Value |
-        | :--- | :--- |
-        | **Detected Class** | `{first_pred.get('class', 'drowsy')}` |
-        | **Confidence Score** | `{first_pred.get('confidence', 0):.2%}` |
-        | **Bounding Box** | x: `{first_pred.get('x', 0):.1f}`, y: `{first_pred.get('y', 0):.1f}`, w: `{first_pred.get('width', 0):.1f}`, h: `{first_pred.get('height', 0):.1f}` |
-        | **Detection Count** | `{len(high_confidence_preds)}` object(s) |
-        
-        **AI Decision Logic:**
-        The model uses a YOLOv8 object detection algorithm. It analyzes the driver's facial features (eye closure, head position) within the bounding box. A confidence score above 60% indicates a high probability of drowsiness.
-        
-        **Recommendation:**
-        🚨 The driver should pull over to a safe location and rest immediately.
-        """)
+        if cls == "drowsy":
+            st.markdown(f"""
+            Our AI has detected a potential safety risk.
+            
+            | Metric | Value |
+            | :--- | :--- |
+            | **Detected Class** | `drowsy` |
+            | **Confidence Score** | `{conf:.2%}` |
+            | **Detection Count** | `{len(high_confidence_preds)}` object(s) |
+            
+            **Recommendation:**
+            🚨 The driver should pull over to a safe location and rest immediately.
+            """)
+        else:
+            st.markdown(f"""
+            Our AI has analyzed the image and found **no signs of drowsiness**.
+            
+            | Metric | Value |
+            | :--- | :--- |
+            | **Detected Class** | `awake` |
+            | **Confidence Score** | `{conf:.2%}` |
+            | **Detection Count** | `{len(high_confidence_preds)}` object(s) |
+            
+            **Recommendation:**
+            ✅ The driver is alert. Continue driving safely.
+            """)
         
     else:
         st.info("✅ No drowsiness detected.")
