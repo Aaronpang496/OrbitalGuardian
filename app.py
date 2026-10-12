@@ -26,7 +26,7 @@ if uploaded_file is not None:
         temp_path = "temp_image.jpg"
         image.save(temp_path)
         
-        # Run the Roboflow workflow
+        # Run the Roboflow workflow (the version that worked)
         result = client.run_workflow(
             workspace_name="tsz-chung-pang",
             workflow_id="drowsiness-detection-vdrowsiness-detection-b2qqq-iqk0f-2-yolo26s-t1-logic",
@@ -34,29 +34,51 @@ if uploaded_file is not None:
             use_cache=True
         )
         
-    # --- Extract predictions from the workflow result ---
+    # --- Extract predictions ---
     predictions = []
     if result and len(result) > 0:
-        predictions = result[0].get("predictions", {}).get("predictions", [])
-    
-    # --- Filter: only keep predictions with confidence > 60% ---
-    high_confidence_preds = [p for p in predictions if p["confidence"] > 0.3]
-    
-    if high_confidence_preds:
+        if isinstance(result[0], dict):
+            preds_dict = result[0].get("predictions", {})
+            if isinstance(preds_dict, dict):
+                predictions = preds_dict.get("predictions", [])
+            elif isinstance(preds_dict, list):
+                predictions = preds_dict
+        elif isinstance(result[0], list):
+            predictions = result[0]
+
+    # --- Display results ---
+    if predictions:
         st.error("⚠️ WARNING: Drowsiness detected!")
         
-        # Draw boxes and percentages on the image
+        # Draw boxes and percentages
         draw = ImageDraw.Draw(image)
-        for pred in high_confidence_preds:
-            x, y = pred["x"], pred["y"]
-            w, h = pred["width"], pred["height"]
-            conf, cls = pred["confidence"], pred["class"]
+        for pred in predictions:
+            x = pred.get("x", 0)
+            y = pred.get("y", 0)
+            w = pred.get("width", 0)
+            h = pred.get("height", 0)
+            conf = pred.get("confidence", 0)
+            cls = pred.get("class", "drowsy")
             
-            # Draw the bounding box
             draw.rectangle([x - w/2, y - h/2, x + w/2, y + h/2], outline="red", width=3)
-            # Draw the label
             draw.text((x - w/2, y - h/2 - 15), f"{cls} {conf:.0%}", fill="red")
             
         st.image(image, caption='Detection Result', use_column_width=True)
+        
+        # Description
+        st.markdown("""
+        ---
+        ### 📝 Detection Analysis
+        Our AI has detected signs of **driver drowsiness**. 
+        - **Recommendation:** The driver should pull over and rest immediately.
+        """)
+        
     else:
         st.info("✅ No drowsiness detected.")
+        
+        # Description
+        st.markdown("""
+        ---
+        ### 📝 Detection Analysis
+        Our AI found **no signs of drowsiness**. The driver appears to be alert.
+        """)
