@@ -19,7 +19,6 @@ client = load_client()
 uploaded_file = st.file_uploader("Choose a photo...", type=["jpg", "jpeg", "png"])
 
 if uploaded_file is not None:
-    # Fix transparency issues
     image = Image.open(uploaded_file).convert("RGB")
     st.image(image, caption='Uploaded Image', use_column_width=True)
     
@@ -52,19 +51,16 @@ if uploaded_file is not None:
 
     # --- Display results ---
     if predictions:
-        # Get the first prediction
         first_pred = predictions[0]
         cls = first_pred.get("class", "drowsy")
         conf = first_pred.get("confidence", 0)
         
         if cls == "drowsy":
             st.error("⚠️ WARNING: Drowsiness detected!")
-            color = "red"
         else:
             st.success("✅ Driver is awake.")
-            color = "green"
         
-        # Draw boxes and labels
+        # Draw boxes and labels (Coordinates handled correctly)
         draw = ImageDraw.Draw(image)
         try:
             font = ImageFont.truetype("arial.ttf", 24)
@@ -72,6 +68,7 @@ if uploaded_file is not None:
             font = ImageFont.load_default()
             
         for pred in predictions:
+            # Extract coordinates (Roboflow returns center x,y and width, height)
             x = pred.get("x", 0)
             y = pred.get("y", 0)
             w = pred.get("width", 0)
@@ -79,9 +76,15 @@ if uploaded_file is not None:
             c = pred.get("confidence", 0)
             cl = pred.get("class", "drowsy")
             
+            # Convert to top-left and bottom-right coordinates
+            x1 = x - w / 2
+            y1 = y - h / 2
+            x2 = x + w / 2
+            y2 = y + h / 2
+            
             box_color = "red" if cl == "drowsy" else "green"
-            draw.rectangle([x - w/2, y - h/2, x + w/2, y + h/2], outline=box_color, width=3)
-            draw.text((x - w/2, y - h/2 - 30), f"{cl} {c:.0%}", fill=box_color, font=font)
+            draw.rectangle([x1, y1, x2, y2], outline=box_color, width=3)
+            draw.text((x1, y1 - 30), f"{cl} {c:.0%}", fill=box_color, font=font)
             
         st.image(image, caption='Detection Result', use_column_width=True)
         
@@ -97,6 +100,7 @@ if uploaded_file is not None:
             | :--- | :--- |
             | **Detected Class** | `drowsy` |
             | **Confidence Score** | `{conf:.2%}` |
+            | **Bounding Box** | x: `{x:.1f}`, y: `{y:.1f}`, w: `{w:.1f}`, h: `{h:.1f}` |
             | **Detection Count** | `{len(predictions)}` object(s) |
             
             **Recommendation:**
@@ -110,6 +114,7 @@ if uploaded_file is not None:
             | :--- | :--- |
             | **Detected Class** | `awake` |
             | **Confidence Score** | `{conf:.2%}` |
+            | **Bounding Box** | x: `{x:.1f}`, y: `{y:.1f}`, w: `{w:.1f}`, h: `{h:.1f}` |
             | **Detection Count** | `{len(predictions)}` object(s) |
             
             **Recommendation:**
@@ -117,4 +122,4 @@ if uploaded_file is not None:
             """)
         
     else:
-        st.info("⚠️ No detection result from the API. Please try another image.")
+        st.warning("⚠️ No detection result from the API. Please try another image.")
