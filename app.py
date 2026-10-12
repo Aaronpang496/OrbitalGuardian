@@ -19,7 +19,10 @@ client = load_client()
 uploaded_file = st.file_uploader("Choose a photo...", type=["jpg", "jpeg", "png"])
 
 if uploaded_file is not None:
+    # Open the image and convert to RGB (fixes transparency issues)
     image = Image.open(uploaded_file)
+    image = image.convert("RGB")
+    
     st.image(image, caption='Uploaded Image', use_column_width=True)
     
     with st.spinner('Analyzing...'):
