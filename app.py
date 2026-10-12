@@ -50,17 +50,19 @@ if uploaded_file is not None:
         elif isinstance(result[0], list):
             predictions = result[0]
 
-    # --- Filter: only keep predictions with confidence > 60% ---
-    high_confidence_preds = [p for p in predictions if p.get("confidence", 0) > 0.6]
-
     # --- Display results ---
-    if high_confidence_preds:
-        first_pred_class = high_confidence_preds[0].get("class", "drowsy")
+    if predictions:
+        # Get the first prediction
+        first_pred = predictions[0]
+        cls = first_pred.get("class", "drowsy")
+        conf = first_pred.get("confidence", 0)
         
-        if first_pred_class == "drowsy":
+        if cls == "drowsy":
             st.error("⚠️ WARNING: Drowsiness detected!")
+            color = "red"
         else:
             st.success("✅ Driver is awake.")
+            color = "green"
         
         # Draw boxes and labels
         draw = ImageDraw.Draw(image)
@@ -69,27 +71,23 @@ if uploaded_file is not None:
         except IOError:
             font = ImageFont.load_default()
             
-        for pred in high_confidence_preds:
+        for pred in predictions:
             x = pred.get("x", 0)
             y = pred.get("y", 0)
             w = pred.get("width", 0)
             h = pred.get("height", 0)
-            conf = pred.get("confidence", 0)
-            cls = pred.get("class", "drowsy")
+            c = pred.get("confidence", 0)
+            cl = pred.get("class", "drowsy")
             
-            color = "red" if cls == "drowsy" else "green"
-            draw.rectangle([x - w/2, y - h/2, x + w/2, y + h/2], outline=color, width=3)
-            draw.text((x - w/2, y - h/2 - 30), f"{cls} {conf:.0%}", fill=color, font=font)
+            box_color = "red" if cl == "drowsy" else "green"
+            draw.rectangle([x - w/2, y - h/2, x + w/2, y + h/2], outline=box_color, width=3)
+            draw.text((x - w/2, y - h/2 - 30), f"{cl} {c:.0%}", fill=box_color, font=font)
             
         st.image(image, caption='Detection Result', use_column_width=True)
         
-        # --- Detailed Description (Dynamic) ---
+        # --- Detailed Analysis ---
         st.markdown("---")
         st.markdown("### 📝 Detection Analysis")
-        
-        first_pred = high_confidence_preds[0]
-        cls = first_pred.get('class', 'drowsy')
-        conf = first_pred.get('confidence', 0)
         
         if cls == "drowsy":
             st.markdown(f"""
@@ -99,7 +97,7 @@ if uploaded_file is not None:
             | :--- | :--- |
             | **Detected Class** | `drowsy` |
             | **Confidence Score** | `{conf:.2%}` |
-            | **Detection Count** | `{len(high_confidence_preds)}` object(s) |
+            | **Detection Count** | `{len(predictions)}` object(s) |
             
             **Recommendation:**
             🚨 The driver should pull over to a safe location and rest immediately.
@@ -112,16 +110,11 @@ if uploaded_file is not None:
             | :--- | :--- |
             | **Detected Class** | `awake` |
             | **Confidence Score** | `{conf:.2%}` |
-            | **Detection Count** | `{len(high_confidence_preds)}` object(s) |
+            | **Detection Count** | `{len(predictions)}` object(s) |
             
             **Recommendation:**
             ✅ The driver is alert. Continue driving safely.
             """)
         
     else:
-        st.info("✅ No drowsiness detected.")
-        st.markdown("""
-        ---
-        ### 📝 Detection Analysis
-        Our AI found **no signs of drowsiness**. The driver appears to be alert.
-        """)
+        st.info("⚠️ No detection result from the API. Please try another image.")
