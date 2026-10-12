@@ -19,7 +19,7 @@ client = load_client()
 uploaded_file = st.file_uploader("Choose a photo...", type=["jpg", "jpeg", "png"])
 
 if uploaded_file is not None:
-    # Open the image and convert to RGB
+    # Open image and convert to RGB (fixes transparency errors)
     image = Image.open(uploaded_file)
     image = image.convert("RGB")
     
@@ -49,8 +49,8 @@ if uploaded_file is not None:
         elif isinstance(result[0], list):
             predictions = result[0]
 
-    # --- Filter: only keep predictions with confidence > 50% ---
-    high_confidence_preds = [p for p in predictions if p.get("confidence", 0) > 0.5]
+    # --- Filter: only keep predictions with confidence > 60% ---
+    high_confidence_preds = [p for p in predictions if p.get("confidence", 0) > 0.6]
 
     # --- Display results ---
     if high_confidence_preds:
@@ -76,6 +76,7 @@ if uploaded_file is not None:
             conf = pred.get("confidence", 0)
             cls = pred.get("class", "drowsy")
             
+            # Red for drowsy, Green for awake
             color = "red" if cls == "drowsy" else "green"
             draw.rectangle([x - w/2, y - h/2, x + w/2, y + h/2], outline=color, width=3)
             draw.text((x - w/2, y - h/2 - 30), f"{cls} {conf:.0%}", fill=color, font=font)
@@ -98,7 +99,7 @@ if uploaded_file is not None:
         | **Detection Count** | `{len(high_confidence_preds)}` object(s) |
         
         **AI Decision Logic:**
-        The model uses a YOLOv8 object detection algorithm. It analyzes the driver's facial features (eye closure, head position) within the bounding box. A confidence score above 50% indicates a high probability of drowsiness.
+        The model uses a YOLOv8 object detection algorithm. It analyzes the driver's facial features (eye closure, head position) within the bounding box. A confidence score above 60% indicates a high probability of drowsiness.
         
         **Recommendation:**
         🚨 The driver should pull over to a safe location and rest immediately.
