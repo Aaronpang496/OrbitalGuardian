@@ -49,7 +49,7 @@ if uploaded_file is not None:
             predictions = result[0]
 
     # --- Filter: only keep predictions with confidence > 70% ---
-    high_confidence_preds = [p for p in predictions if p.get("confidence", 0) > 0.7]
+    high_confidence_preds = [p for p in predictions if p.get("confidence", 0) > 0.6]
 
     # --- Display results ---
     if high_confidence_preds:
