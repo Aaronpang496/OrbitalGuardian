@@ -19,7 +19,7 @@ client = load_client()
 uploaded_file = st.file_uploader("Choose a photo...", type=["jpg", "jpeg", "png"])
 
 if uploaded_file is not None:
-    # Open the image and convert to RGB (fixes transparency issues)
+    # Open the image and convert to RGB
     image = Image.open(uploaded_file)
     image = image.convert("RGB")
     
@@ -29,6 +29,7 @@ if uploaded_file is not None:
         temp_path = "temp_image.jpg"
         image.save(temp_path)
         
+        # Run the Roboflow workflow
         result = client.run_workflow(
             workspace_name="tsz-chung-pang",
             workflow_id="drowsiness-detection-vdrowsiness-detection-b2qqq-iqk0f-2-yolo26s-t1-logic",
@@ -48,8 +49,8 @@ if uploaded_file is not None:
         elif isinstance(result[0], list):
             predictions = result[0]
 
-    # --- Filter: only keep predictions with confidence > 70% ---
-    high_confidence_preds = [p for p in predictions if p.get("confidence", 0) > 0.6]
+    # --- Filter: only keep predictions with confidence > 50% ---
+    high_confidence_preds = [p for p in predictions if p.get("confidence", 0) > 0.5]
 
     # --- Display results ---
     if high_confidence_preds:
@@ -97,7 +98,7 @@ if uploaded_file is not None:
         | **Detection Count** | `{len(high_confidence_preds)}` object(s) |
         
         **AI Decision Logic:**
-        The model uses a YOLOv8 object detection algorithm. It analyzes the driver's facial features (eye closure, head position) within the bounding box. A confidence score above 70% indicates a high probability of drowsiness.
+        The model uses a YOLOv8 object detection algorithm. It analyzes the driver's facial features (eye closure, head position) within the bounding box. A confidence score above 50% indicates a high probability of drowsiness.
         
         **Recommendation:**
         🚨 The driver should pull over to a safe location and rest immediately.
