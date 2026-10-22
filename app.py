@@ -1,5 +1,5 @@
 import streamlit as st
-from inference_sdk import InferenceHTTPClient, InferenceConfiguration
+from inference_sdk import InferenceHTTPClient
 from PIL import Image, ImageDraw, ImageFont, ImageEnhance
 import time
 
@@ -10,17 +10,18 @@ st.write("Upload a driver's photo to detect drowsiness.")
 
 @st.cache_resource
 def load_client():
+    # FIXED: Removed the .configure() part that was causing the TypeError
     return InferenceHTTPClient(
         api_url="https://serverless.roboflow.com",
-        api_key="3zlKh7bl9yZXMl5RvxNY"
-    ).configure(InferenceConfiguration(api_key_transport="header"))
+        api_key="PASTE_YOUR_ROBOFLOW_API_KEY_HERE" # <--- CHANGE THIS!
+    )
 
 client = load_client()
 
 uploaded_file = st.file_uploader("Choose a photo...", type=["jpg", "jpeg", "png"])
 
 if uploaded_file is not None:
-    # --- Image Pre-processing (Method 3) ---
+    # --- Image Pre-processing ---
     image = Image.open(uploaded_file).convert("RGB")
     enhancer = ImageEnhance.Contrast(image)
     image = enhancer.enhance(1.2)  # Increase contrast by 20%
@@ -31,7 +32,7 @@ if uploaded_file is not None:
         temp_path = "temp_image.jpg"
         image.save(temp_path)
         
-        # --- Retry Logic (Method 1) ---
+        # --- Retry Logic ---
         result = None
         for attempt in range(3):
             try:
@@ -61,7 +62,7 @@ if uploaded_file is not None:
         elif isinstance(result[0], list):
             predictions = result[0]
 
-    # --- Lower Confidence Threshold (Method 2) ---
+    # --- Lower Confidence Threshold ---
     high_confidence_preds = [p for p in predictions if p.get("confidence", 0) > 0.3]
 
     # --- Display results ---
