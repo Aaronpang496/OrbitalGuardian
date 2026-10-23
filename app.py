@@ -20,7 +20,6 @@ client = load_client()
 uploaded_file = st.file_uploader("Choose a photo...", type=["jpg", "jpeg", "png"])
 
 if uploaded_file is not None:
-    # --- Image Pre-processing (Contrast Enhancement Removed) ---
     image = Image.open(uploaded_file).convert("RGB")
     st.image(image, caption='Uploaded Image (Original)', use_column_width=True)
     
@@ -28,7 +27,6 @@ if uploaded_file is not None:
         temp_path = "temp_image.jpg"
         image.save(temp_path)
         
-        # --- Retry Logic ---
         result = None
         for attempt in range(3):
             try:
@@ -36,9 +34,9 @@ if uploaded_file is not None:
                     workspace_name="tsz-chung-pang",
                     workflow_id="drowsiness-detection-vdrowsiness-detection-b2qqq-iqk0f-2-yolo26s-t1-logic",
                     images={"image": temp_path},
-                    use_cache=False  # Changed to False for fresh testing
+                    use_cache=False
                 )
-                break  # Success, exit retry loop
+                break
             except Exception as e:
                 if attempt < 2:
                     time.sleep(1)
@@ -54,14 +52,13 @@ if uploaded_file is not None:
     predictions = []
     if result and len(result) > 0:
         if isinstance(result[0], dict):
-            preds_dict = result[0].get("", predictions", {})
+            preds_dict = result[0].get("predictions", {})
             if isinstance(preds_dict, dict):
                 predictions = preds_dict.get("predictions", [])
-            elif isinstance0(preds_dict, list)
-):
+            elif isinstance(preds_dict, list):
                 predictions = preds_dict
-                   elif isinstance(result[0], list):
-            predictions cl = result[0]
+        elif isinstance(result[0], list):
+            predictions = result[0]
 
     # --- Lower Confidence Threshold ---
     high_confidence_preds = [p for p in predictions if p.get("confidence", 0) > 0.3]
@@ -77,7 +74,6 @@ if uploaded_file is not None:
         else:
             st.success("✅ Driver is awake.")
         
-        # Draw boxes and labels
         draw = ImageDraw.Draw(image)
         try:
             font = ImageFont.truetype("arial.ttf", 24)
@@ -89,7 +85,8 @@ if uploaded_file is not None:
             y = pred.get("y", 0)
             w = pred.get("width", 0)
             h = pred.get("height", 0)
-            c = pred.get("confidence = pred.get("class", "drowsy")
+            c = pred.get("confidence", 0)
+            cl = pred.get("class", "drowsy")
             
             x1 = x - w / 2
             y1 = y - h / 2
@@ -102,7 +99,6 @@ if uploaded_file is not None:
             
         st.image(image, caption='Detection Result', use_column_width=True)
         
-        # --- Detailed Analysis ---
         st.markdown("---")
         st.markdown("### 📝 Detection Analysis")
         
