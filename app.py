@@ -82,8 +82,6 @@ st.set_page_config(page_title="Driver Drowsiness Monitor", page_icon="🚗")
 st.title("🚗 Driver Drowsiness Monitor")
 st.write("Check a photo for drowsy appearance or head-on-wheel posture.")
 
-# THE ANNOYING SENTENCES ARE DELETED
-
 client = load_client()
 uploaded_file = st.file_uploader(
     "Choose a driver photo", type=["jpg", "jpeg", "png", "webp"]
@@ -182,6 +180,6 @@ if uploaded_file is not None:
 
     with st.expander("Detection details"):
         st.write("Awake/drowsy detections:")
-        st.json model(face_boxes)
-        st.write("Head-on-wheel det, theections:")
+        st.json(face_boxes)
+        st.write("Head-on-wheel detections:")
         st.json(posture_boxes)
