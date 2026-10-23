@@ -30,9 +30,10 @@ if uploaded_file is not None:
         result = None
         for attempt in range(3):
             try:
+                # --- CHANGED WORKFLOW ID TO VERSION 1 (RF-DETR) ---
                 result = client.run_workflow(
                     workspace_name="tsz-chung-pang",
-                    workflow_id="drowsiness-detection-vdrowsiness-detection-b2qqq-iqk0f-2-yolo26s-t1-logic",
+                    workflow_id="drowsiness-detection-vdrowsiness-detection-b2qqq-iqk0f-1-rfdetr-small-t1-logic",
                     images={"image": temp_path},
                     use_cache=False
                 )
@@ -130,13 +131,13 @@ if uploaded_file is not None:
             """)
         
     else:
-        st.warning("⚠️ No detection result from the API. The AI could not find a face in this image.")
+        st.warning("⚠️ No confident detection—state unknown.")
         st.markdown("""
         ---
         ### 📝 Detection Analysis
         The model returned an empty list `[]`. This means it did not recognize any faces in the image. This may be due to:
-        - **The image is too wide/zoomed out** (the face is too small for the AI to see).
-        - **The image angle or lighting conditions.**
+        - **Image Scale:** The face might be too small in a wide-angle photo. Try cropping closer to the driver.
+        - **Lighting or Angles.**
         
-        **Recommendation:** Please try uploading a closer, zoomed-in photo of the driver's face.
+        **Recommendation:** Please try uploading a closer photo of the driver's face.
         """)
