@@ -10,10 +10,10 @@ st.write("Upload a driver's photo to detect drowsiness.")
 
 @st.cache_resource
 def load_client():
-    # FIXED: Removed the .configure() part that was causing the TypeError
+    # Your API Key is already filled in here
     return InferenceHTTPClient(
         api_url="https://serverless.roboflow.com",
-        api_key="PASTE_YOUR_ROBOFLOW_API_KEY_HERE" # <--- CHANGE THIS!
+        api_key="3zlKh7bl9yZXMl5RvxNY" 
     )
 
 client = load_client()
@@ -114,7 +114,6 @@ if uploaded_file is not None:
             | :--- | :--- |
             | **Detected Class** | `drowsy` |
             | **Confidence Score** | `{conf:.2%}` |
-            | **Bounding Box** | x: `{x:.1f}`, y: `{y:.1f}`, w: `{w:.1f}`, h: `{h:.1f}` |
             | **Detection Count** | `{len(high_confidence_preds)}` object(s) |
             
             **Recommendation:**
@@ -128,7 +127,6 @@ if uploaded_file is not None:
             | :--- | :--- |
             | **Detected Class** | `awake` |
             | **Confidence Score** | `{conf:.2%}` |
-            | **Bounding Box** | x: `{x:.1f}`, y: `{y:.1f}`, w: `{w:.1f}`, h: `{h:.1f}` |
             | **Detection Count** | `{len(high_confidence_preds)}` object(s) |
             
             **Recommendation:**
