@@ -21,7 +21,7 @@ FACE_THRESHOLD = 0.3
 
 @st.cache_resource
 def load_client():
-    # HARDCODED API KEY - NO SECRETS NEEDED
+    # HARDCODED API KEY
     return InferenceHTTPClient(
         api_url="https://serverless.roboflow.com",
         api_key="3zlKh7bl9yZXMl5RvxNY" 
@@ -81,10 +81,8 @@ def draw_boxes(image, boxes, color):
 st.set_page_config(page_title="Driver Drowsiness Monitor", page_icon="🚗")
 st.title("🚗 Driver Drowsiness Monitor")
 st.write("Check a photo for drowsy appearance or head-on-wheel posture.")
-st.caption(
-    "Demonstration only. A single photo cannot establish whether someone "
-    "is safe to drive or diagnose the cause of an unusual posture."
-)
+
+# THE ANNOYING SENTENCES ARE DELETED
 
 client = load_client()
 uploaded_file = st.file_uploader(
@@ -160,9 +158,6 @@ if uploaded_file is not None:
             "⚠️ DROWSINESS ALERT: Head-on-wheel posture detected. "
             "Check on the driver immediately."
         )
-        st.caption(
-            "This is a posture-based alert, not proof of the cause."
-        )
     elif has_class(accepted_face_boxes, "drowsy"):
         st.warning("⚠️ Possible drowsiness detected from appearance.")
     elif face_error or posture_error:
@@ -187,6 +182,6 @@ if uploaded_file is not None:
 
     with st.expander("Detection details"):
         st.write("Awake/drowsy detections:")
-        st.json(face_boxes)
-        st.write("Head-on-wheel detections:")
+        st.json model(face_boxes)
+        st.write("Head-on-wheel det, theections:")
         st.json(posture_boxes)
