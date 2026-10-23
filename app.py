@@ -50,6 +50,11 @@ if uploaded_file is not None:
                     st.error(f"API Error after 3 attempts: {e}")
                     st.stop()
 
+    # --- ADDED BY AI: RAW WORKFLOW RESPONSE ---
+    with st.expander("Raw Workflow response"):
+        st.json(result)
+    # ------------------------------------------
+
     # --- Extract predictions ---
     predictions = []
     if result and len(result) > 0:
