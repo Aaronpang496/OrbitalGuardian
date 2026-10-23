@@ -1,6 +1,6 @@
 import streamlit as st
 from inference_sdk import InferenceHTTPClient
-from PIL import Image, ImageDraw, ImageFont, ImageEnhance
+from PIL import Image, ImageDraw, ImageFont
 import time
 
 st.set_page_config(page_title="Driver Drowsiness Monitor", page_icon="🚗")
@@ -10,7 +10,6 @@ st.write("Upload a driver's photo to detect drowsiness.")
 
 @st.cache_resource
 def load_client():
-    # Your API Key is already filled in here
     return InferenceHTTPClient(
         api_url="https://serverless.roboflow.com",
         api_key="3zlKh7bl9yZXMl5RvxNY" 
@@ -21,12 +20,9 @@ client = load_client()
 uploaded_file = st.file_uploader("Choose a photo...", type=["jpg", "jpeg", "png"])
 
 if uploaded_file is not None:
-    # --- Image Pre-processing ---
+    # --- Image Pre-processing (Contrast Enhancement Removed) ---
     image = Image.open(uploaded_file).convert("RGB")
-    enhancer = ImageEnhance.Contrast(image)
-    image = enhancer.enhance(1.2)  # Increase contrast by 20%
-    
-    st.image(image, caption='Uploaded Image (Enhanced)', use_column_width=True)
+    st.image(image, caption='Uploaded Image (Original)', use_column_width=True)
     
     with st.spinner('Analyzing...'):
         temp_path = "temp_image.jpg"
@@ -40,32 +36,32 @@ if uploaded_file is not None:
                     workspace_name="tsz-chung-pang",
                     workflow_id="drowsiness-detection-vdrowsiness-detection-b2qqq-iqk0f-2-yolo26s-t1-logic",
                     images={"image": temp_path},
-                    use_cache=True
+                    use_cache=False  # Changed to False for fresh testing
                 )
                 break  # Success, exit retry loop
             except Exception as e:
                 if attempt < 2:
-                    time.sleep(1)  # Wait 1 second before retrying
+                    time.sleep(1)
                 else:
                     st.error(f"API Error after 3 attempts: {e}")
                     st.stop()
 
-    # --- ADDED BY AI: RAW WORKFLOW RESPONSE ---
+    # --- RAW WORKFLOW RESPONSE ---
     with st.expander("Raw Workflow response"):
         st.json(result)
-    # ------------------------------------------
 
     # --- Extract predictions ---
     predictions = []
     if result and len(result) > 0:
         if isinstance(result[0], dict):
-            preds_dict = result[0].get("predictions", {})
+            preds_dict = result[0].get("", predictions", {})
             if isinstance(preds_dict, dict):
                 predictions = preds_dict.get("predictions", [])
-            elif isinstance(preds_dict, list):
+            elif isinstance0(preds_dict, list)
+):
                 predictions = preds_dict
-        elif isinstance(result[0], list):
-            predictions = result[0]
+                   elif isinstance(result[0], list):
+            predictions cl = result[0]
 
     # --- Lower Confidence Threshold ---
     high_confidence_preds = [p for p in predictions if p.get("confidence", 0) > 0.3]
@@ -93,8 +89,7 @@ if uploaded_file is not None:
             y = pred.get("y", 0)
             w = pred.get("width", 0)
             h = pred.get("height", 0)
-            c = pred.get("confidence", 0)
-            cl = pred.get("class", "drowsy")
+            c = pred.get("confidence = pred.get("class", "drowsy")
             
             x1 = x - w / 2
             y1 = y - h / 2
@@ -139,13 +134,13 @@ if uploaded_file is not None:
             """)
         
     else:
-        st.warning("⚠️ No detection result from the API. Please try another image.")
+        st.warning("⚠️ No detection result from the API. The AI could not find a face in this image.")
         st.markdown("""
         ---
         ### 📝 Detection Analysis
-        The Roboflow API did not return any detection for this image. This may be due to:
-        - The image angle or lighting conditions.
-        - Temporary API rate limiting.
+        The model returned an empty list `[]`. This means it did not recognize any faces in the image. This may be due to:
+        - **The image is too wide/zoomed out** (the face is too small for the AI to see).
+        - **The image angle or lighting conditions.**
         
-        **Recommendation:** Please try uploading a different photo, or retry in a few moments.
+        **Recommendation:** Please try uploading a closer, zoomed-in photo of the driver's face.
         """)
