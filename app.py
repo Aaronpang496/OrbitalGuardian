@@ -10,10 +10,10 @@ st.write("Upload a driver's photo to detect drowsiness.")
 
 @st.cache_resource
 def load_client():
-    # SECURE: Reads the API key from Streamlit Secrets instead of hardcoding it
+    # The hardcoded key is back so you don't have to deal with Secrets right now
     return InferenceHTTPClient(
         api_url="https://serverless.roboflow.com",
-        api_key=st.secrets["ROBOFLOW_API_KEY"] 
+        api_key="3zlKh7bl9yZXMl5RvxNY" 
     )
 
 client = load_client()
@@ -31,7 +31,7 @@ if uploaded_file is not None:
         result = None
         for attempt in range(3):
             try:
-                # FIXED: Using Version 1 (RF-DETR) which successfully detects faces
+                # Using Version 1 (RF-DETR) which actually works!
                 result = client.run_workflow(
                     workspace_name="tsz-chung-pang",
                     workflow_id="drowsiness-detection-vdrowsiness-detection-b2qqq-iqk0f-1-rfdetr-small-t1-logic",
@@ -46,7 +46,7 @@ if uploaded_file is not None:
                     st.error(f"API Error after 3 attempts: {e}")
                     st.stop()
 
-    # --- RAW WORKFLOW RESPONSE (For debugging) ---
+    # --- RAW WORKFLOW RESPONSE ---
     with st.expander("Raw Workflow response"):
         st.json(result)
 
