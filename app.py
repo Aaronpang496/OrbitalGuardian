@@ -8,20 +8,15 @@ from PIL import Image, ImageDraw
 
 WORKSPACE = "tsz-chung-pang"
 
-# The version 1 RF-DETR Workflow that worked for your awake/drowsy photos.
 FACE_WORKFLOW = (
     "drowsiness-detection-"
     "vdrowsiness-detection-b2qqq-iqk0f-1-rfdetr-small-t1-logic"
 )
-
-# The separate head-on-wheel posture Project.
 POSTURE_WORKFLOW = "driver-head-on-wheel-posture"
-
 FACE_THRESHOLD = 0.3
 
 @st.cache_resource
 def load_client():
-    # HARDCODED API KEY
     return InferenceHTTPClient(
         api_url="https://serverless.roboflow.com",
         api_key="3zlKh7bl9yZXMl5RvxNY" 
@@ -75,7 +70,7 @@ def draw_boxes(image, boxes, color):
 
 st.set_page_config(page_title="Driver Drowsiness Monitor", page_icon="🚗")
 st.title("🚗 Driver Drowsiness Monitor")
-st.write("Check a photo for drowsy appearance or head-on-wheel posture.")
+st.write("Upload a driver's photo to detect drowsiness.")
 
 client = load_client()
 uploaded_file = st.file_uploader(
@@ -95,7 +90,6 @@ if uploaded_file is not None:
     try:
         original.save(temp_path)
 
-        # 1. Check Face
         with st.spinner("Analyzing driver..."):
             try:
                 face_result = client.run_workflow(
@@ -105,9 +99,8 @@ if uploaded_file is not None:
                     use_cache=False,
                 )
             except Exception:
-                pass # Silently ignore errors
+                pass 
 
-        # 2. Check Posture (Silently)
         with st.spinner("Checking posture..."):
             try:
                 posture_result = client.run_workflow(
@@ -123,7 +116,7 @@ if uploaded_file is not None:
                     use_cache=False,
                 )
             except Exception:
-                pass # Silently ignore errors if model is missing
+                pass 
     finally:
         temp_path.unlink(missing_ok=True)
 
@@ -144,7 +137,6 @@ if uploaded_file is not None:
     annotated = original.copy()
     draw_boxes(annotated, accepted_face_boxes, "orange")
     
-    # Only draw the red box if it actually found the posture
     if head_on_wheel_boxes:
         draw_boxes(annotated, head_on_wheel_boxes, "red")
         
@@ -152,23 +144,20 @@ if uploaded_file is not None:
 
     # --- THE NEAT VERDICT LOGIC ---
     
-    # If Posture is detected, SHOW IT LOUDLY.
     if head_on_wheel_boxes:
         st.error("⚠️ DROWSINESS ALERT: Head-on-wheel posture detected. Check on the driver immediately.")
         
-    # If Face is Drowsy, show it.
     elif has_class(accepted_face_boxes, "drowsy"):
         st.warning("⚠️ Possible drowsiness detected from appearance.")
         
-    # If Face is Awake, show it.
     elif has_class(accepted_face_boxes, "awake"):
-        st.info("✅ Awake appearance detected. No head-on-wheel posture detected.")
+        # Changed this to only say "Awake"
+        st.info("✅ Awake appearance detected.")
         
-    # If nothing works, show a clean error (no mention of API failures).
     else:
-        st.warning("⚠️ State unknown: no confident face or posture detected in this photo.")
+        # Changed this to not mention posture
+        st.warning("⚠️ State unknown: no confident face detected in this photo.")
 
-    # The expander for debugging only
     with st.expander("Raw Detection Details"):
         st.write("Face Data:")
         st.json(face_boxes)
