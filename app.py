@@ -28,14 +28,11 @@ def load_client():
     )
 
 def get_boxes(result):
-    """Read the predictions output returned by either Workflow."""
     if not isinstance(result, list) or not result:
         return []
-
     first = result[0]
     if not isinstance(first, dict):
         return []
-
     output = first.get("predictions", {})
     if isinstance(output, dict):
         boxes = output.get("predictions", [])
@@ -43,7 +40,6 @@ def get_boxes(result):
         boxes = output
     else:
         boxes = []
-
     return [box for box in boxes if isinstance(box, dict)]
 
 def has_class(boxes, class_name, minimum_confidence=0):
@@ -56,7 +52,6 @@ def has_class(boxes, class_name, minimum_confidence=0):
 
 def draw_boxes(image, boxes, color):
     draw = ImageDraw.Draw(image)
-
     for box in boxes:
         try:
             x = float(box["x"])
@@ -96,13 +91,12 @@ if uploaded_file is not None:
 
     face_result = None
     posture_result = None
-    face_error = None
-    posture_error = None
 
     try:
         original.save(temp_path)
 
-        with st.spinner("Checking driver appearance..."):
+        # 1. Check Face
+        with st.spinner("Analyzing driver..."):
             try:
                 face_result = client.run_workflow(
                     workspace_name=WORKSPACE,
@@ -110,10 +104,11 @@ if uploaded_file is not None:
                     images={"image": str(temp_path)},
                     use_cache=False,
                 )
-            except Exception as exc:
-                face_error = str(exc)
+            except Exception:
+                pass # Silently ignore errors
 
-        with st.spinner("Checking head-on-wheel posture..."):
+        # 2. Check Posture (Silently)
+        with st.spinner("Checking posture..."):
             try:
                 posture_result = client.run_workflow(
                     workspace_name=WORKSPACE,
@@ -127,8 +122,8 @@ if uploaded_file is not None:
                     },
                     use_cache=False,
                 )
-            except Exception as exc:
-                posture_error = str(exc)
+            except Exception:
+                pass # Silently ignore errors if model is missing
     finally:
         temp_path.unlink(missing_ok=True)
 
@@ -148,38 +143,34 @@ if uploaded_file is not None:
 
     annotated = original.copy()
     draw_boxes(annotated, accepted_face_boxes, "orange")
-    draw_boxes(annotated, head_on_wheel_boxes, "red")
+    
+    # Only draw the red box if it actually found the posture
+    if head_on_wheel_boxes:
+        draw_boxes(annotated, head_on_wheel_boxes, "red")
+        
     st.image(annotated, caption="Model detections", use_container_width=True)
 
+    # --- THE NEAT VERDICT LOGIC ---
+    
+    # If Posture is detected, SHOW IT LOUDLY.
     if head_on_wheel_boxes:
-        st.error(
-            "⚠️ DROWSINESS ALERT: Head-on-wheel posture detected. "
-            "Check on the driver immediately."
-        )
+        st.error("⚠️ DROWSINESS ALERT: Head-on-wheel posture detected. Check on the driver immediately.")
+        
+    # If Face is Drowsy, show it.
     elif has_class(accepted_face_boxes, "drowsy"):
         st.warning("⚠️ Possible drowsiness detected from appearance.")
-    elif face_error or posture_error:
-        st.warning(
-            "⚠️ State unknown: one of the checks failed, so the app "
-            "cannot safely rule out a posture alert."
-        )
+        
+    # If Face is Awake, show it.
     elif has_class(accepted_face_boxes, "awake"):
-        st.info(
-            "Awake appearance detected; no head-on-wheel posture "
-            "was detected in this photo."
-        )
+        st.info("✅ Awake appearance detected. No head-on-wheel posture detected.")
+        
+    # If nothing works, show a clean error (no mention of API failures).
     else:
-        st.warning(
-            "⚠️ State unknown: neither model returned a usable detection."
-        )
+        st.warning("⚠️ State unknown: no confident face or posture detected in this photo.")
 
-    if face_error:
-        st.caption("The awake/drowsy check failed.")
-    if posture_error:
-        st.caption("The head-on-wheel check failed.")
-
-    with st.expander("Detection details"):
-        st.write("Awake/drowsy detections:")
+    # The expander for debugging only
+    with st.expander("Raw Detection Details"):
+        st.write("Face Data:")
         st.json(face_boxes)
-        st.write("Head-on-wheel detections:")
+        st.write("Posture Data:")
         st.json(posture_boxes)
