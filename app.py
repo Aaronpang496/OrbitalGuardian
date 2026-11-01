@@ -1,21 +1,10 @@
 import os
 import tempfile
 from pathlib import Path
-import math
 
 import streamlit as st
 from inference_sdk import InferenceHTTPClient
 from PIL import Image, ImageDraw
-import cv2
-import numpy as np
-
-# --- SAFE MEDIAPIPE IMPORT ---
-try:
-    from mediapipe.python.solutions import face_mesh as mp_face_mesh
-    from mediapipe.python.solutions import drawing_utils as mp_drawing
-    MP_AVAILABLE = True
-except ImportError:
-    MP_AVAILABLE = False
 
 # --- PAGE SETUP ---
 st.set_page_config(page_title="Orbital Guardian", page_icon="🛡️", layout="centered")
@@ -27,9 +16,8 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown('<p class="main-title">🛡️ Orbital Guardian</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-title">AI Driver Monitoring + Biometric Eye Tracker</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-title">AI Driver Monitoring & Fatigue Detection</p>', unsafe_allow_html=True)
 
-# --- INITIALIZE AI MODELS ---
 WORKSPACE = "tsz-chung-pang"
 FACE_WORKFLOW = "drowsiness-detection-vdrowsiness-detection-b2qqq-iqk0f-1-rfdetr-small-t1-logic"
 POSTURE_WORKFLOW = "driver-head-on-wheel-posture"
@@ -42,16 +30,6 @@ def load_client():
         api_key="3zlKh7bl9yZXMl5RvxNY" 
     )
 
-@st.cache_resource
-def load_face_mesh():
-    if not MP_AVAILABLE:
-        return None
-    return mp_face_mesh.FaceMesh(static_image_mode=True, max_num_faces=1, refine_landmarks=True, min_detection_confidence=0.5)
-
-client = load_client()
-face_mesh = load_face_mesh()
-
-# --- HELPER FUNCTIONS ---
 def get_boxes(result):
     if not isinstance(result, list) or not result: return []
     first = result[0]
@@ -75,49 +53,9 @@ def draw_boxes(image, boxes, color):
         draw.rectangle((x1, y1, x2, y2), outline=color, width=4)
         draw.text((max(0, x1), max(0, y1 - 18)), str(box.get("class", "detection")), fill=color)
 
-# --- BIOMETRIC TRACKER ---
-def analyze_biometrics(image):
-    if not MP_AVAILABLE or face_mesh is None:
-        return "MediaPipe library not loaded. Please check requirements.txt.", None
+client = load_client()
 
-    img_rgb = np.array(image)
-    results = face_mesh.process(img_rgb)
-    
-    if not results.multi_face_landmarks: 
-        return "No face detected by biometric tracker.", None
-        
-    face_landmarks = results.multi_face_landmarks[0]
-    h, w, _ = img_rgb.shape
-    
-    # Left and Right eye indices
-    left_eye = [362, 385, 387, 263, 373, 380]
-    right_eye = [33, 160, 158, 133, 153, 144]
-    
-    def get_ear(eye_indices):
-        coords = [(int(face_landmarks.landmark[i].x * w), int(face_landmarks.landmark[i].y * h)) for i in eye_indices]
-        v1 = math.dist(coords[1], coords[5])
-        v2 = math.dist(coords[2], coords[4])
-        h1 = math.dist(coords[0], coords[3])
-        return (v1 + v2) / (2.0 * h1), coords
-
-    left_ear, left_coords = get_ear(left_eye)
-    right_ear, right_coords = get_ear(right_eye)
-    avg_ear = (left_ear + right_ear) / 2.0
-    
-    # Draw eye dots
-    img_annotated = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2BGR)
-    for eye in [left_coords, right_coords]:
-        for pt in eye:
-            cv2.circle(img_annotated, pt, 2, (255, 255, 0), -1)
-            
-    img_out = cv2.cvtColor(img_annotated, cv2.COLOR_BGR2RGB)
-    
-    if avg_ear < 0.22:
-        return f"🚨 MICRO-SLEEP DETECTED (EAR: {avg_ear:.2f})", img_out
-    else:
-        return f"✅ Eyes Open (EAR: {avg_ear:.2f})", img_out
-
-# --- UI AND IMAGE INPUT ---
+# --- TABS ---
 st.write("### Live Analysis")
 tab1, tab2 = st.tabs(["📁 Upload Image", "📷 Live Camera"])
 image_source = None
@@ -135,56 +73,59 @@ with tab2:
 # --- PROCESSING ---
 if image_source is not None:
     original = image_source
+    st.image(original, caption="Original photo", use_container_width=True)
 
-    # 1. BIOMETRIC TRACKER
-    biometric_msg, cv_annotated = analyze_biometrics(original)
-
-    # 2. ROBOFLOW AI
     with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as temp:
         temp_path = Path(temp.name)
 
-    face_result, posture_result = None, None
+    face_result = None
+    posture_result = None
+
     try:
         original.save(temp_path)
-        with st.spinner("Running AI Diagnostics..."):
+
+        with st.spinner("Analyzing driver..."):
             try:
                 face_result = client.run_workflow(workspace_name=WORKSPACE, workflow_id=FACE_WORKFLOW, images={"image": str(temp_path)}, use_cache=False)
-                posture_result = client.run_workflow(workspace_name=WORKSPACE, workflow_id=POSTURE_WORKFLOW, images={"image": str(temp_path)}, parameters={"confidence": 0.4}, use_cache=False)
+            except Exception: pass 
+
+        with st.spinner("Checking posture..."):
+            try:
+                posture_result = client.run_workflow(workspace_name=WORKSPACE, workflow_id=POSTURE_WORKFLOW, images={"image": str(temp_path)}, parameters={"confidence": 0.4, "iou_threshold": 0.3, "class_agnostic_nms": False, "max_detections": 1000}, use_cache=False)
             except Exception: pass 
     finally:
         temp_path.unlink(missing_ok=True)
 
     face_boxes = get_boxes(face_result)
     posture_boxes = get_boxes(posture_result)
-    accepted_face_boxes = [box for box in face_boxes if box.get("class") in {"awake", "drowsy"} and box.get("confidence", 0) >= FACE_THRESHOLD]
+
+    accepted_face_boxes = [box for box in face_boxes if box.get("class") in {"awake", "drowsy"} and isinstance(box.get("confidence"), (int, float)) and box["confidence"] >= FACE_THRESHOLD]
     head_on_wheel_boxes = [box for box in posture_boxes if box.get("class") == "head_on_wheel"]
 
-    rf_annotated = original.copy()
-    draw_boxes(rf_annotated, accepted_face_boxes, "orange")
-    if head_on_wheel_boxes: draw_boxes(rf_annotated, head_on_wheel_boxes, "red")
+    annotated = original.copy()
+    draw_boxes(annotated, accepted_face_boxes, "orange")
+    
+    if head_on_wheel_boxes:
+        draw_boxes(annotated, head_on_wheel_boxes, "red")
+        
+    st.image(annotated, caption="Model detections", use_container_width=True)
 
-    # --- DISPLAY RESULTS ---
-    col1, col2 = st.columns(2)
-    with col1:
-        st.image(rf_annotated, caption="Roboflow AI (Face & Posture)", use_container_width=True)
-    with col2:
-        if cv_annotated is not None:
-            st.image(cv_annotated, caption="Biometric Eye Tracker (MediaPipe)", use_container_width=True)
-
+    # --- THE VERDICT LOGIC ---
     st.markdown("---")
     st.write("### 📊 System Diagnostics")
     
-    # Display Biometric Data
-    if biometric_msg:
-        if "MICRO-SLEEP" in biometric_msg:
-            st.error(biometric_msg)
-        else:
-            st.success(biometric_msg)
-
-    # Display AI Data
     if head_on_wheel_boxes:
-        st.error("🚨 **POSTURE ALERT:** Head-on-wheel detected. Check on driver immediately.")
+        st.error("⚠️ **DROWSINESS ALERT:** Head-on-wheel posture detected. Check on the driver immediately.")
     elif has_class(accepted_face_boxes, "drowsy"):
-        st.warning("⚠️ **AI ALERT:** Drowsy appearance detected.")
-    elif has_class(accepted_face_boxes, "awake") and "MICRO-SLEEP" not in str(biometric_msg):
-        st.info("ℹ️ **AI STATUS:** Driver is awake and alert.")
+        st.warning("⚠️ **Possible drowsiness detected** from appearance.")
+    elif has_class(accepted_face_boxes, "awake"):
+        st.success("✅ **Awake appearance detected.**")
+    else:
+        st.info("ℹ️ **State unknown:** No confident face detected in this photo.")
+
+    # --- THE ANALYTICS ARE BACK ---
+    with st.expander("Raw Detection Details (Analytics)"):
+        st.write("Face Data:")
+        st.json(face_boxes)
+        st.write("Posture Data:")
+        st.json(posture_boxes)
