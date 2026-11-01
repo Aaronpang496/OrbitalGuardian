@@ -6,6 +6,8 @@ import streamlit as st
 from inference_sdk import InferenceHTTPClient
 from PIL import Image, ImageDraw
 
+st.set_page_config(page_title="Orbital Guardian", page_icon="🛡️", layout="wide")
+
 WORKSPACE = "tsz-chung-pang"
 
 FACE_WORKFLOW = (
@@ -68,17 +70,31 @@ def draw_boxes(image, boxes, color):
             fill=color,
         )
 
-st.set_page_config(page_title="Driver Drowsiness Monitor", page_icon="🚗")
-st.title("🚗 Driver Drowsiness Monitor")
-st.write("Upload a driver's photo to detect drowsiness.")
+st.title("🛡️ Orbital Guardian")
+st.write("Check a driver's photo for drowsiness or head-on-wheel posture.")
 
 client = load_client()
-uploaded_file = st.file_uploader(
-    "Choose a driver photo", type=["jpg", "jpeg", "png", "webp"]
-)
 
-if uploaded_file is not None:
-    original = Image.open(uploaded_file).convert("RGB")
+# --- NEW: TABS FOR UPLOAD VS CAMERA ---
+tab1, tab2 = st.tabs(["📁 Upload Photo", "📷 Take Live Photo"])
+
+image_source = None
+
+with tab1:
+    uploaded_file = st.file_uploader(
+        "Choose a driver photo", type=["jpg", "jpeg", "png", "webp"]
+    )
+    if uploaded_file is not None:
+        image_source = Image.open(uploaded_file).convert("RGB")
+
+with tab2:
+    camera_file = st.camera_input("Take a live photo")
+    if camera_file is not None:
+        image_source = Image.open(camera_file).convert("RGB")
+
+# --- PROCESS THE IMAGE (FROM EITHER TAB) ---
+if image_source is not None:
+    original = image_source
     st.image(original, caption="Original photo", use_container_width=True)
 
     with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as temp:
@@ -151,11 +167,9 @@ if uploaded_file is not None:
         st.warning("⚠️ Possible drowsiness detected from appearance.")
         
     elif has_class(accepted_face_boxes, "awake"):
-        # Changed this to only say "Awake"
         st.info("✅ Awake appearance detected.")
         
     else:
-        # Changed this to not mention posture
         st.warning("⚠️ State unknown: no confident face detected in this photo.")
 
     with st.expander("Raw Detection Details"):
