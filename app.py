@@ -8,10 +8,23 @@ from PIL import Image, ImageDraw
 
 # --- PAGE SETUP ---
 st.set_page_config(page_title="Orbital Guardian", page_icon="🛡️", layout="centered")
+
+# 🚨 THE NEW CSS: Making the title MASSIVE
 st.markdown("""
     <style>
-    .main-title { font-size: 40px; font-weight: 800; color: #1e293b; margin-bottom: 0px; }
-    .sub-title { font-size: 18px; color: #64748b; margin-bottom: 20px; }
+    .main-title { 
+        font-size: 56px; 
+        font-weight: 900; 
+        color: #0f172a; 
+        margin-bottom: 0px; 
+        line-height: 1.1;
+    }
+    .sub-title { 
+        font-size: 20px; 
+        color: #64748b; 
+        margin-bottom: 30px; 
+        font-weight: 500;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -123,7 +136,7 @@ if image_source is not None:
     else:
         st.info("ℹ️ **State unknown:** No confident face detected in this photo.")
 
-    # --- THE ANALYTICS ARE BACK ---
+    # --- THE ANALYTICS ---
     with st.expander("Raw Detection Details (Analytics)"):
         st.write("Face Data:")
         st.json(face_boxes)
