@@ -1,14 +1,12 @@
 import os
 import tempfile
 from pathlib import Path
-import math
 
 import streamlit as st
 from inference_sdk import InferenceHTTPClient
 from PIL import Image, ImageDraw
 import cv2
 import numpy as np
-import mediapipe as mp
 
 # --- PAGE SETUP ---
 st.set_page_config(page_title="Orbital Guardian", page_icon="🛡️", layout="centered")
@@ -20,7 +18,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown('<p class="main-title">🛡️ Orbital Guardian</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-title">AI Driver Monitoring + Eye Aspect Ratio (EAR) Tracker</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-title">AI Driver Monitoring + Biometric Eye Tracker</p>', unsafe_allow_html=True)
 
 # --- INITIALIZE AI MODELS ---
 WORKSPACE = "tsz-chung-pang"
@@ -35,13 +33,15 @@ def load_client():
         api_key="3zlKh7bl9yZXMl5RvxNY" 
     )
 
-# Load MediaPipe Face Mesh for EAR
+# Load OpenCV Face and Eye detectors safely
 @st.cache_resource
-def load_face_mesh():
-    return mp.solutions.face_mesh.FaceMesh(static_image_mode=True, max_num_faces=1, refine_landmarks=True, min_detection_confidence=0.5)
+def load_cv_cascades():
+    face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+    eye_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_eye.xml')
+    return face_cascade, eye_cascade
 
 client = load_client()
-face_mesh = load_face_mesh()
+face_cascade, eye_cascade = load_cv_cascades()
 
 # --- HELPER FUNCTIONS ---
 def get_boxes(result):
@@ -67,36 +67,42 @@ def draw_boxes(image, boxes, color):
         draw.rectangle((x1, y1, x2, y2), outline=color, width=4)
         draw.text((max(0, x1), max(0, y1 - 18)), str(box.get("class", "detection")), fill=color)
 
-# --- EAR MATH FUNCTION ---
-def calculate_ear(image):
-    img_rgb = np.array(image)
-    results = face_mesh.process(img_rgb)
-    if not results.multi_face_landmarks: return None, None
+# --- OPENCV BIOMETRIC TRACKER ---
+def analyze_eyes_opencv(image):
+    # Convert PIL Image to OpenCV format
+    img_cv = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+    gray = cv2.cvtColor(img_cv, cv2.COLOR_BGR2GRAY)
     
-    face_landmarks = results.multi_face_landmarks[0]
-    h, w, _ = img_rgb.shape
+    # Detect faces
+    faces = face_cascade.detectMultiScale(gray, 1.3, 5)
     
-    # Left Eye Landmarks (MediaPipe indices)
-    left_eye = [362, 385, 387, 263, 373, 380]
-    # Right Eye Landmarks
-    right_eye = [33, 160, 158, 133, 153, 144]
-    
-    def get_ear(eye_indices):
-        coords = [(int(face_landmarks.landmark[i].x * w), int(face_landmarks.landmark[i].y * h)) for i in eye_indices]
-        # Vertical distances
-        v1 = math.dist(coords[1], coords[5])
-        v2 = math.dist(coords[2], coords[4])
-        # Horizontal distance
-        h1 = math.dist(coords[0], coords[3])
-        # EAR Formula
-        ear = (v1 + v2) / (2.0 * h1)
-        return ear, coords
+    if len(faces) == 0:
+        return None, False, np.array(image)
 
-    left_ear, left_coords = get_ear(left_eye)
-    right_ear, right_coords = get_ear(right_eye)
+    # Grab the first face
+    (x, y, w, h) = faces[0]
+    roi_gray = gray[y:y+h, x:x+w]
     
-    avg_ear = (left_ear + right_ear) / 2.0
-    return avg_ear, [left_coords, right_coords]
+    # Detect eyes within the face
+    eyes = eye_cascade.detectMultiScale(roi_gray)
+    
+    # Draw visual boxes for the judges to see
+    img_annotated = img_cv.copy()
+    cv2.rectangle(img_annotated, (x, y), (x+w, y+h), (0, 255, 255), 2) # Yellow face box
+    
+    eye_count = 0
+    for (ex, ey, ew, eh) in eyes:
+        cv2.rectangle(img_annotated, (x+ex, y+ey), (x+ex+ew, y+ey+eh), (255, 255, 0), 2) # Cyan eye box
+        eye_count += 1
+        
+    # Convert back to RGB for Streamlit
+    img_annotated_rgb = cv2.cvtColor(img_annotated, cv2.COLOR_BGR2RGB)
+    
+    # Simple logic: If OpenCV finds 0 eyes, we assume they are closed.
+    # If it finds 1 or 2 eyes, they are open.
+    is_microsleep = (eye_count == 0)
+    
+    return eye_count, is_microsleep, img_annotated_rgb
 
 # --- UI AND IMAGE INPUT ---
 st.write("### Live Analysis")
@@ -116,22 +122,9 @@ with tab2:
 # --- PROCESSING ---
 if image_source is not None:
     original = image_source
-    annotated = original.copy()
-    draw = ImageDraw.Draw(annotated)
 
-    # 1. RUN MEDIAPIPE EAR TRACKER
-    ear_value, eye_coords = calculate_ear(original)
-    is_microsleep = False
-    
-    if ear_value is not None:
-        # Threshold for closed eyes is usually around 0.20 to 0.25
-        if ear_value < 0.22: 
-            is_microsleep = True
-            
-        # Draw eye dots
-        for eye in eye_coords:
-            for pt in eye:
-                draw.ellipse((pt[0]-3, pt[1]-3, pt[0]+3, pt[1]+3), fill="cyan")
+    # 1. RUN OPENCV BIOMETRIC TRACKER
+    eye_count, is_microsleep, cv_annotated = analyze_eyes_opencv(original)
 
     # 2. RUN ROBOFLOW AI
     with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as temp:
@@ -153,26 +146,27 @@ if image_source is not None:
     accepted_face_boxes = [box for box in face_boxes if box.get("class") in {"awake", "drowsy"} and box.get("confidence", 0) >= FACE_THRESHOLD]
     head_on_wheel_boxes = [box for box in posture_boxes if box.get("class") == "head_on_wheel"]
 
-    draw_boxes(annotated, accepted_face_boxes, "orange")
-    if head_on_wheel_boxes: draw_boxes(annotated, head_on_wheel_boxes, "red")
+    # Draw Roboflow boxes on the original image for display
+    rf_annotated = original.copy()
+    draw_boxes(rf_annotated, accepted_face_boxes, "orange")
+    if head_on_wheel_boxes: draw_boxes(rf_annotated, head_on_wheel_boxes, "red")
 
     # --- DISPLAY RESULTS ---
     col1, col2 = st.columns(2)
     with col1:
-        st.image(original, caption="Original Input", use_container_width=True)
+        st.image(rf_annotated, caption="Roboflow AI Detection", use_container_width=True)
     with col2:
-        st.image(annotated, caption="AI + Biometric Tracking", use_container_width=True)
+        st.image(cv_annotated, caption="Biometric Eye Tracker (OpenCV)", use_container_width=True)
 
     st.markdown("---")
     st.write("### 📊 System Diagnostics")
     
-    # Display EAR Data
-    if ear_value:
-        st.write(f"**Eye Aspect Ratio (EAR):** `{ear_value:.3f}`")
+    # Display Biometric Data
+    if eye_count is not None:
         if is_microsleep:
-            st.error(f"🚨 **BIOMETRIC ALERT:** Micro-sleep detected! EAR dropped to {ear_value:.2f}. Eyes are closing.")
+            st.error(f"🚨 **BIOMETRIC ALERT:** Micro-sleep detected! (0 Eyes Open).")
         else:
-            st.success(f"✅ **BIOMETRIC STATUS:** Eyes open. EAR is healthy at {ear_value:.2f}.")
+            st.success(f"✅ **BIOMETRIC STATUS:** Eyes open. ({eye_count} detected).")
 
     # Display AI Data
     if head_on_wheel_boxes:
