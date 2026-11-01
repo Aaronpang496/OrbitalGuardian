@@ -1,13 +1,21 @@
 import os
 import tempfile
 from pathlib import Path
-import urllib.request
+import math
 
 import streamlit as st
 from inference_sdk import InferenceHTTPClient
 from PIL import Image, ImageDraw
 import cv2
 import numpy as np
+
+# --- SAFE MEDIAPIPE IMPORT ---
+try:
+    from mediapipe.python.solutions import face_mesh as mp_face_mesh
+    from mediapipe.python.solutions import drawing_utils as mp_drawing
+    MP_AVAILABLE = True
+except ImportError:
+    MP_AVAILABLE = False
 
 # --- PAGE SETUP ---
 st.set_page_config(page_title="Orbital Guardian", page_icon="🛡️", layout="centered")
@@ -34,22 +42,14 @@ def load_client():
         api_key="3zlKh7bl9yZXMl5RvxNY" 
     )
 
-# Load OpenCV Face and Eye detectors safely (DOWNLOADING THE FILES)
 @st.cache_resource
-def load_cv_cascades():
-    face_url = "https://raw.githubusercontent.com/opencv/opencv/master/data/haarcascades/haarcascade_frontalface_default.xml"
-    eye_url = "https://raw.githubusercontent.com/opencv/opencv/master/data/haarcascades/haarcascade_eye.xml"
-    
-    urllib.request.urlretrieve(face_url, "face.xml")
-    urllib.request.urlretrieve(eye_url, "eye.xml")
-    
-    face_cascade = cv2.CascadeClassifier("face.xml")
-    eye_cascade = cv2.CascadeClassifier("eye.xml")
-    
-    return face_cascade, eye_cascade
+def load_face_mesh():
+    if not MP_AVAILABLE:
+        return None
+    return mp_face_mesh.FaceMesh(static_image_mode=True, max_num_faces=1, refine_landmarks=True, min_detection_confidence=0.5)
 
 client = load_client()
-face_cascade, eye_cascade = load_cv_cascades()
+face_mesh = load_face_mesh()
 
 # --- HELPER FUNCTIONS ---
 def get_boxes(result):
@@ -75,35 +75,47 @@ def draw_boxes(image, boxes, color):
         draw.rectangle((x1, y1, x2, y2), outline=color, width=4)
         draw.text((max(0, x1), max(0, y1 - 18)), str(box.get("class", "detection")), fill=color)
 
-# --- OPENCV BIOMETRIC TRACKER ---
-def analyze_eyes_opencv(image):
-    img_cv = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
-    gray = cv2.cvtColor(img_cv, cv2.COLOR_BGR2GRAY)
-    
-    faces = face_cascade.detectMultiScale(gray, 1.3, 5)
-    
-    if len(faces) == 0:
-        return None, False, np.array(image)
+# --- BIOMETRIC TRACKER ---
+def analyze_biometrics(image):
+    if not MP_AVAILABLE or face_mesh is None:
+        return "MediaPipe library not loaded. Please check requirements.txt.", None
 
-    (x, y, w, h) = faces[0]
-    roi_gray = gray[y:y+h, x:x+w]
+    img_rgb = np.array(image)
+    results = face_mesh.process(img_rgb)
     
-    eyes = eye_cascade.detectMultiScale(roi_gray)
-    
-    img_annotated = img_cv.copy()
-    cv2.rectangle(img_annotated, (x, y), (x+w, y+h), (0, 255, 255), 2) 
-    
-    eye_count = 0
-    for (ex, ey, ew, eh) in eyes:
-        cv2.rectangle(img_annotated, (x+ex, y+ey), (x+ex+ew, y+ey+eh), (255, 255, 0), 2) 
-        eye_count += 1
+    if not results.multi_face_landmarks: 
+        return "No face detected by biometric tracker.", None
         
-    img_annotated_rgb = cv2.cvtColor(img_annotated, cv2.COLOR_BGR2RGB)
+    face_landmarks = results.multi_face_landmarks[0]
+    h, w, _ = img_rgb.shape
     
-    # If OpenCV finds 0 eyes, they are closed
-    is_microsleep = (eye_count == 0)
+    # Left and Right eye indices
+    left_eye = [362, 385, 387, 263, 373, 380]
+    right_eye = [33, 160, 158, 133, 153, 144]
     
-    return eye_count, is_microsleep, img_annotated_rgb
+    def get_ear(eye_indices):
+        coords = [(int(face_landmarks.landmark[i].x * w), int(face_landmarks.landmark[i].y * h)) for i in eye_indices]
+        v1 = math.dist(coords[1], coords[5])
+        v2 = math.dist(coords[2], coords[4])
+        h1 = math.dist(coords[0], coords[3])
+        return (v1 + v2) / (2.0 * h1), coords
+
+    left_ear, left_coords = get_ear(left_eye)
+    right_ear, right_coords = get_ear(right_eye)
+    avg_ear = (left_ear + right_ear) / 2.0
+    
+    # Draw eye dots
+    img_annotated = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2BGR)
+    for eye in [left_coords, right_coords]:
+        for pt in eye:
+            cv2.circle(img_annotated, pt, 2, (255, 255, 0), -1)
+            
+    img_out = cv2.cvtColor(img_annotated, cv2.COLOR_BGR2RGB)
+    
+    if avg_ear < 0.22:
+        return f"🚨 MICRO-SLEEP DETECTED (EAR: {avg_ear:.2f})", img_out
+    else:
+        return f"✅ Eyes Open (EAR: {avg_ear:.2f})", img_out
 
 # --- UI AND IMAGE INPUT ---
 st.write("### Live Analysis")
@@ -124,10 +136,10 @@ with tab2:
 if image_source is not None:
     original = image_source
 
-    # 1. RUN OPENCV BIOMETRIC TRACKER
-    eye_count, is_microsleep, cv_annotated = analyze_eyes_opencv(original)
+    # 1. BIOMETRIC TRACKER
+    biometric_msg, cv_annotated = analyze_biometrics(original)
 
-    # 2. RUN ROBOFLOW AI
+    # 2. ROBOFLOW AI
     with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as temp:
         temp_path = Path(temp.name)
 
@@ -154,22 +166,25 @@ if image_source is not None:
     # --- DISPLAY RESULTS ---
     col1, col2 = st.columns(2)
     with col1:
-        st.image(rf_annotated, caption="Roboflow AI Detection", use_container_width=True)
+        st.image(rf_annotated, caption="Roboflow AI (Face & Posture)", use_container_width=True)
     with col2:
-        st.image(cv_annotated, caption="Biometric Eye Tracker (OpenCV)", use_container_width=True)
+        if cv_annotated is not None:
+            st.image(cv_annotated, caption="Biometric Eye Tracker (MediaPipe)", use_container_width=True)
 
     st.markdown("---")
     st.write("### 📊 System Diagnostics")
     
-    if eye_count is not None:
-        if is_microsleep:
-            st.error(f"🚨 **BIOMETRIC ALERT:** Micro-sleep detected! (0 Eyes Open).")
+    # Display Biometric Data
+    if biometric_msg:
+        if "MICRO-SLEEP" in biometric_msg:
+            st.error(biometric_msg)
         else:
-            st.success(f"✅ **BIOMETRIC STATUS:** Eyes open. ({eye_count} detected).")
+            st.success(biometric_msg)
 
+    # Display AI Data
     if head_on_wheel_boxes:
         st.error("🚨 **POSTURE ALERT:** Head-on-wheel detected. Check on driver immediately.")
     elif has_class(accepted_face_boxes, "drowsy"):
         st.warning("⚠️ **AI ALERT:** Drowsy appearance detected.")
-    elif has_class(accepted_face_boxes, "awake") and not is_microsleep:
+    elif has_class(accepted_face_boxes, "awake") and "MICRO-SLEEP" not in str(biometric_msg):
         st.info("ℹ️ **AI STATUS:** Driver is awake and alert.")
