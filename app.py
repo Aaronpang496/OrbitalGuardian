@@ -1,6 +1,7 @@
 import os
 import tempfile
 from pathlib import Path
+import urllib.request
 
 import streamlit as st
 from inference_sdk import InferenceHTTPClient
@@ -33,11 +34,18 @@ def load_client():
         api_key="3zlKh7bl9yZXMl5RvxNY" 
     )
 
-# Load OpenCV Face and Eye detectors safely
+# Load OpenCV Face and Eye detectors safely (DOWNLOADING THE FILES)
 @st.cache_resource
 def load_cv_cascades():
-    face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
-    eye_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_eye.xml')
+    face_url = "https://raw.githubusercontent.com/opencv/opencv/master/data/haarcascades/haarcascade_frontalface_default.xml"
+    eye_url = "https://raw.githubusercontent.com/opencv/opencv/master/data/haarcascades/haarcascade_eye.xml"
+    
+    urllib.request.urlretrieve(face_url, "face.xml")
+    urllib.request.urlretrieve(eye_url, "eye.xml")
+    
+    face_cascade = cv2.CascadeClassifier("face.xml")
+    eye_cascade = cv2.CascadeClassifier("eye.xml")
+    
     return face_cascade, eye_cascade
 
 client = load_client()
@@ -69,37 +77,30 @@ def draw_boxes(image, boxes, color):
 
 # --- OPENCV BIOMETRIC TRACKER ---
 def analyze_eyes_opencv(image):
-    # Convert PIL Image to OpenCV format
     img_cv = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
     gray = cv2.cvtColor(img_cv, cv2.COLOR_BGR2GRAY)
     
-    # Detect faces
     faces = face_cascade.detectMultiScale(gray, 1.3, 5)
     
     if len(faces) == 0:
         return None, False, np.array(image)
 
-    # Grab the first face
     (x, y, w, h) = faces[0]
     roi_gray = gray[y:y+h, x:x+w]
     
-    # Detect eyes within the face
     eyes = eye_cascade.detectMultiScale(roi_gray)
     
-    # Draw visual boxes for the judges to see
     img_annotated = img_cv.copy()
-    cv2.rectangle(img_annotated, (x, y), (x+w, y+h), (0, 255, 255), 2) # Yellow face box
+    cv2.rectangle(img_annotated, (x, y), (x+w, y+h), (0, 255, 255), 2) 
     
     eye_count = 0
     for (ex, ey, ew, eh) in eyes:
-        cv2.rectangle(img_annotated, (x+ex, y+ey), (x+ex+ew, y+ey+eh), (255, 255, 0), 2) # Cyan eye box
+        cv2.rectangle(img_annotated, (x+ex, y+ey), (x+ex+ew, y+ey+eh), (255, 255, 0), 2) 
         eye_count += 1
         
-    # Convert back to RGB for Streamlit
     img_annotated_rgb = cv2.cvtColor(img_annotated, cv2.COLOR_BGR2RGB)
     
-    # Simple logic: If OpenCV finds 0 eyes, we assume they are closed.
-    # If it finds 1 or 2 eyes, they are open.
+    # If OpenCV finds 0 eyes, they are closed
     is_microsleep = (eye_count == 0)
     
     return eye_count, is_microsleep, img_annotated_rgb
@@ -146,7 +147,6 @@ if image_source is not None:
     accepted_face_boxes = [box for box in face_boxes if box.get("class") in {"awake", "drowsy"} and box.get("confidence", 0) >= FACE_THRESHOLD]
     head_on_wheel_boxes = [box for box in posture_boxes if box.get("class") == "head_on_wheel"]
 
-    # Draw Roboflow boxes on the original image for display
     rf_annotated = original.copy()
     draw_boxes(rf_annotated, accepted_face_boxes, "orange")
     if head_on_wheel_boxes: draw_boxes(rf_annotated, head_on_wheel_boxes, "red")
@@ -161,14 +161,12 @@ if image_source is not None:
     st.markdown("---")
     st.write("### 📊 System Diagnostics")
     
-    # Display Biometric Data
     if eye_count is not None:
         if is_microsleep:
             st.error(f"🚨 **BIOMETRIC ALERT:** Micro-sleep detected! (0 Eyes Open).")
         else:
             st.success(f"✅ **BIOMETRIC STATUS:** Eyes open. ({eye_count} detected).")
 
-    # Display AI Data
     if head_on_wheel_boxes:
         st.error("🚨 **POSTURE ALERT:** Head-on-wheel detected. Check on driver immediately.")
     elif has_class(accepted_face_boxes, "drowsy"):
