@@ -1,19 +1,30 @@
 import os
 import tempfile
 from pathlib import Path
+import math
 
 import streamlit as st
 from inference_sdk import InferenceHTTPClient
 from PIL import Image, ImageDraw
+import cv2
+import numpy as np
+import mediapipe as mp
 
-st.set_page_config(page_title="Orbital Guardian", page_icon="🛡️", layout="wide")
+# --- PAGE SETUP ---
+st.set_page_config(page_title="Orbital Guardian", page_icon="🛡️", layout="centered")
+st.markdown("""
+    <style>
+    .main-title { font-size: 40px; font-weight: 800; color: #1e293b; margin-bottom: 0px; }
+    .sub-title { font-size: 18px; color: #64748b; margin-bottom: 20px; }
+    </style>
+""", unsafe_allow_html=True)
 
+st.markdown('<p class="main-title">🛡️ Orbital Guardian</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-title">AI Driver Monitoring + Eye Aspect Ratio (EAR) Tracker</p>', unsafe_allow_html=True)
+
+# --- INITIALIZE AI MODELS ---
 WORKSPACE = "tsz-chung-pang"
-
-FACE_WORKFLOW = (
-    "drowsiness-detection-"
-    "vdrowsiness-detection-b2qqq-iqk0f-1-rfdetr-small-t1-logic"
-)
+FACE_WORKFLOW = "drowsiness-detection-vdrowsiness-detection-b2qqq-iqk0f-1-rfdetr-small-t1-logic"
 POSTURE_WORKFLOW = "driver-head-on-wheel-posture"
 FACE_THRESHOLD = 0.3
 
@@ -24,156 +35,149 @@ def load_client():
         api_key="3zlKh7bl9yZXMl5RvxNY" 
     )
 
+# Load MediaPipe Face Mesh for EAR
+@st.cache_resource
+def load_face_mesh():
+    return mp.solutions.face_mesh.FaceMesh(static_image_mode=True, max_num_faces=1, refine_landmarks=True, min_detection_confidence=0.5)
+
+client = load_client()
+face_mesh = load_face_mesh()
+
+# --- HELPER FUNCTIONS ---
 def get_boxes(result):
-    if not isinstance(result, list) or not result:
-        return []
+    if not isinstance(result, list) or not result: return []
     first = result[0]
-    if not isinstance(first, dict):
-        return []
+    if not isinstance(first, dict): return []
     output = first.get("predictions", {})
-    if isinstance(output, dict):
-        boxes = output.get("predictions", [])
-    elif isinstance(output, list):
-        boxes = output
-    else:
-        boxes = []
+    if isinstance(output, dict): boxes = output.get("predictions", [])
+    elif isinstance(output, list): boxes = output
+    else: boxes = []
     return [box for box in boxes if isinstance(box, dict)]
 
 def has_class(boxes, class_name, minimum_confidence=0):
-    return any(
-        box.get("class") == class_name
-        and isinstance(box.get("confidence"), (int, float))
-        and box["confidence"] >= minimum_confidence
-        for box in boxes
-    )
+    return any(box.get("class") == class_name and isinstance(box.get("confidence"), (int, float)) and box["confidence"] >= minimum_confidence for box in boxes)
 
 def draw_boxes(image, boxes, color):
     draw = ImageDraw.Draw(image)
     for box in boxes:
         try:
-            x = float(box["x"])
-            y = float(box["y"])
-            width = float(box["width"])
-            height = float(box["height"])
-        except (KeyError, TypeError, ValueError):
-            continue
-
-        x1 = x - width / 2
-        y1 = y - height / 2
-        x2 = x + width / 2
-        y2 = y + height / 2
-
+            x, y, width, height = float(box["x"]), float(box["y"]), float(box["width"]), float(box["height"])
+        except (KeyError, TypeError, ValueError): continue
+        x1, y1, x2, y2 = x - width / 2, y - height / 2, x + width / 2, y + height / 2
         draw.rectangle((x1, y1, x2, y2), outline=color, width=4)
-        draw.text(
-            (max(0, x1), max(0, y1 - 18)),
-            str(box.get("class", "detection")),
-            fill=color,
-        )
+        draw.text((max(0, x1), max(0, y1 - 18)), str(box.get("class", "detection")), fill=color)
 
-st.title("🛡️ Orbital Guardian")
-st.write("Check a driver's photo for drowsiness or head-on-wheel posture.")
+# --- EAR MATH FUNCTION ---
+def calculate_ear(image):
+    img_rgb = np.array(image)
+    results = face_mesh.process(img_rgb)
+    if not results.multi_face_landmarks: return None, None
+    
+    face_landmarks = results.multi_face_landmarks[0]
+    h, w, _ = img_rgb.shape
+    
+    # Left Eye Landmarks (MediaPipe indices)
+    left_eye = [362, 385, 387, 263, 373, 380]
+    # Right Eye Landmarks
+    right_eye = [33, 160, 158, 133, 153, 144]
+    
+    def get_ear(eye_indices):
+        coords = [(int(face_landmarks.landmark[i].x * w), int(face_landmarks.landmark[i].y * h)) for i in eye_indices]
+        # Vertical distances
+        v1 = math.dist(coords[1], coords[5])
+        v2 = math.dist(coords[2], coords[4])
+        # Horizontal distance
+        h1 = math.dist(coords[0], coords[3])
+        # EAR Formula
+        ear = (v1 + v2) / (2.0 * h1)
+        return ear, coords
 
-client = load_client()
+    left_ear, left_coords = get_ear(left_eye)
+    right_ear, right_coords = get_ear(right_eye)
+    
+    avg_ear = (left_ear + right_ear) / 2.0
+    return avg_ear, [left_coords, right_coords]
 
-# --- NEW: TABS FOR UPLOAD VS CAMERA ---
-tab1, tab2 = st.tabs(["📁 Upload Photo", "📷 Take Live Photo"])
-
+# --- UI AND IMAGE INPUT ---
+st.write("### Live Analysis")
+tab1, tab2 = st.tabs(["📁 Upload Image", "📷 Live Camera"])
 image_source = None
 
 with tab1:
-    uploaded_file = st.file_uploader(
-        "Choose a driver photo", type=["jpg", "jpeg", "png", "webp"]
-    )
+    uploaded_file = st.file_uploader("Upload a driver photo", type=["jpg", "jpeg", "png", "webp"], label_visibility="collapsed")
     if uploaded_file is not None:
         image_source = Image.open(uploaded_file).convert("RGB")
 
 with tab2:
-    camera_file = st.camera_input("Take a live photo")
+    camera_file = st.camera_input("Take a live photo", label_visibility="collapsed")
     if camera_file is not None:
         image_source = Image.open(camera_file).convert("RGB")
 
-# --- PROCESS THE IMAGE (FROM EITHER TAB) ---
+# --- PROCESSING ---
 if image_source is not None:
     original = image_source
-    st.image(original, caption="Original photo", use_container_width=True)
+    annotated = original.copy()
+    draw = ImageDraw.Draw(annotated)
 
+    # 1. RUN MEDIAPIPE EAR TRACKER
+    ear_value, eye_coords = calculate_ear(original)
+    is_microsleep = False
+    
+    if ear_value is not None:
+        # Threshold for closed eyes is usually around 0.20 to 0.25
+        if ear_value < 0.22: 
+            is_microsleep = True
+            
+        # Draw eye dots
+        for eye in eye_coords:
+            for pt in eye:
+                draw.ellipse((pt[0]-3, pt[1]-3, pt[0]+3, pt[1]+3), fill="cyan")
+
+    # 2. RUN ROBOFLOW AI
     with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as temp:
         temp_path = Path(temp.name)
 
-    face_result = None
-    posture_result = None
-
+    face_result, posture_result = None, None
     try:
         original.save(temp_path)
-
-        with st.spinner("Analyzing driver..."):
+        with st.spinner("Running AI Diagnostics..."):
             try:
-                face_result = client.run_workflow(
-                    workspace_name=WORKSPACE,
-                    workflow_id=FACE_WORKFLOW,
-                    images={"image": str(temp_path)},
-                    use_cache=False,
-                )
-            except Exception:
-                pass 
-
-        with st.spinner("Checking posture..."):
-            try:
-                posture_result = client.run_workflow(
-                    workspace_name=WORKSPACE,
-                    workflow_id=POSTURE_WORKFLOW,
-                    images={"image": str(temp_path)},
-                    parameters={
-                        "confidence": 0.4,
-                        "iou_threshold": 0.3,
-                        "class_agnostic_nms": False,
-                        "max_detections": 1000,
-                    },
-                    use_cache=False,
-                )
-            except Exception:
-                pass 
+                face_result = client.run_workflow(workspace_name=WORKSPACE, workflow_id=FACE_WORKFLOW, images={"image": str(temp_path)}, use_cache=False)
+                posture_result = client.run_workflow(workspace_name=WORKSPACE, workflow_id=POSTURE_WORKFLOW, images={"image": str(temp_path)}, parameters={"confidence": 0.4}, use_cache=False)
+            except Exception: pass 
     finally:
         temp_path.unlink(missing_ok=True)
 
     face_boxes = get_boxes(face_result)
     posture_boxes = get_boxes(posture_result)
+    accepted_face_boxes = [box for box in face_boxes if box.get("class") in {"awake", "drowsy"} and box.get("confidence", 0) >= FACE_THRESHOLD]
+    head_on_wheel_boxes = [box for box in posture_boxes if box.get("class") == "head_on_wheel"]
 
-    accepted_face_boxes = [
-        box for box in face_boxes
-        if box.get("class") in {"awake", "drowsy"}
-        and isinstance(box.get("confidence"), (int, float))
-        and box["confidence"] >= FACE_THRESHOLD
-    ]
-    head_on_wheel_boxes = [
-        box for box in posture_boxes
-        if box.get("class") == "head_on_wheel"
-    ]
-
-    annotated = original.copy()
     draw_boxes(annotated, accepted_face_boxes, "orange")
-    
-    if head_on_wheel_boxes:
-        draw_boxes(annotated, head_on_wheel_boxes, "red")
-        
-    st.image(annotated, caption="Model detections", use_container_width=True)
+    if head_on_wheel_boxes: draw_boxes(annotated, head_on_wheel_boxes, "red")
 
-    # --- THE NEAT VERDICT LOGIC ---
+    # --- DISPLAY RESULTS ---
+    col1, col2 = st.columns(2)
+    with col1:
+        st.image(original, caption="Original Input", use_container_width=True)
+    with col2:
+        st.image(annotated, caption="AI + Biometric Tracking", use_container_width=True)
+
+    st.markdown("---")
+    st.write("### 📊 System Diagnostics")
     
+    # Display EAR Data
+    if ear_value:
+        st.write(f"**Eye Aspect Ratio (EAR):** `{ear_value:.3f}`")
+        if is_microsleep:
+            st.error(f"🚨 **BIOMETRIC ALERT:** Micro-sleep detected! EAR dropped to {ear_value:.2f}. Eyes are closing.")
+        else:
+            st.success(f"✅ **BIOMETRIC STATUS:** Eyes open. EAR is healthy at {ear_value:.2f}.")
+
+    # Display AI Data
     if head_on_wheel_boxes:
-        st.error("⚠️ DROWSINESS ALERT: Head-on-wheel posture detected. Check on the driver immediately.")
-        
+        st.error("🚨 **POSTURE ALERT:** Head-on-wheel detected. Check on driver immediately.")
     elif has_class(accepted_face_boxes, "drowsy"):
-        st.warning("⚠️ Possible drowsiness detected from appearance.")
-        
-    elif has_class(accepted_face_boxes, "awake"):
-        st.info("✅ Awake appearance detected.")
-        
-    else:
-        st.warning("⚠️ State unknown: no confident face detected in this photo.")
-
-    with st.expander("Raw Detection Details"):
-        st.write("Face Data:")
-        st.json(face_boxes)
-        st.write("Posture Data:")
-        st.json(posture_boxes)
+        st.warning("⚠️ **AI ALERT:** Drowsy appearance detected.")
+    elif has_class(accepted_face_boxes, "awake") and not is_microsleep:
+        st.info("ℹ️ **AI STATUS:** Driver is awake and alert.")
