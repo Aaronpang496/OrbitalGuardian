@@ -1,6 +1,5 @@
 streamlit
-ultralytics
-gdown
-pillow
 inference-sdk
-mediapipe
+pillow
+opencv-python-headless
+numpy
